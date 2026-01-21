@@ -52,13 +52,13 @@ export async function initWebRtcServer() {
     [
       {
         protocol : 'udp',
-        ip       : '9.9.9.9',
-        port     : 20000
+        ip       : '0.0.0.0',
+        port     : 20005
       },
       {
         protocol : 'tcp',
-        ip       : '9.9.9.9',
-        port     : 20000
+        ip       : '0.0.0.0',
+        port     : 20005
       }
     ]
   });
