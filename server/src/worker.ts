@@ -44,3 +44,23 @@ export async function initRouter() {
   router = await worker.createRouter({ mediaCodecs });
   return router;
 }
+
+export async function initWebRtcServer() {
+  const webRtcServer = await worker.createWebRtcServer(
+  {
+    listenInfos :
+    [
+      {
+        protocol : 'udp',
+        ip       : '9.9.9.9',
+        port     : 20000
+      },
+      {
+        protocol : 'tcp',
+        ip       : '9.9.9.9',
+        port     : 20000
+      }
+    ]
+  });
+  return webRtcServer;
+}
