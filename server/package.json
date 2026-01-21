@@ -1,18 +1,23 @@
 {
   "name": "server",
-  "module": "index.ts",
-  "type": "module",
-  "private": true,
-  "devDependencies": {
-    "@types/bun": "latest",
-    "@types/express": "^5.0.6",
-    "@types/node": "^25.0.9",
-    "tsx": "^4.21.0"
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc -b",
+    "start": "node ./dist/index.js",
+    "dev": "npm run build && npm run start"
   },
-  "peerDependencies": {
+  "type": "module",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^5.2.1",
+    "mediasoup": "^3.19.14",
     "typescript": "^5.9.3"
   },
-  "dependencies": {
-    "express": "^5.2.1"
+  "devDependencies": {
+    "@types/express": "^5.0.6"
   }
 }
