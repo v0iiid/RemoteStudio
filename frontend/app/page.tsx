@@ -1,6 +1,6 @@
 "use client"
 import * as mediasoupClient from 'mediasoup-client';
-import { TransportOptions } from 'mediasoup-client/types';
+import { Transport, TransportOptions } from 'mediasoup-client/types';
 import { useEffect, useRef, useState } from 'react';
 
 export default function Home() {
@@ -8,6 +8,7 @@ export default function Home() {
   const deviceRef = useRef<mediasoupClient.Device | null>(null);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const transportRef = useRef<Transport | null>(null)
 
   useEffect(() => {
     const ws = new WebSocket('ws://localhost:8081');
@@ -49,7 +50,22 @@ export default function Home() {
               dtlsParameters: data.dtlsParameters,
               sctpParameters: data.sctpParameters
             })
+            const params = data.dtlsParameters
+            transport.on("connect", async ({ dtlsParameters }) => {
+              try {
+                ws.send(JSON.stringify({
+                  type: "transport-connect",
+                  data: {
+                    transportId: transport.id,
+                    dtlsParameters: dtlsParameters
+                  }
+                }))
+              } catch (err: any) {
+                console.warn('error at connect')
+              }
+            })
 
+            transportRef.current = transport
           } catch (err: any) {
             console.log("error in createTransport", err)
           }
@@ -83,15 +99,51 @@ export default function Home() {
       onClick={async () => {
         console.log("preseed")
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const videoTrack = stream.getVideoTracks()[0];
+        const transport = transportRef.current
+        if (transport) {
+             transport.on("produce", (parameters) => {
+              try {
+                const ws =socketRef.current
+                if(!ws) return
+                ws.send(JSON.stringify({
+                  type:"transport-produce",
+                  data:{
+                    transportId: transport.id,
+                    kind: parameters.kind,
+                    rtpParameters: parameters.rtpParameters,
+                    appData: parameters.appData
+              }}))
+              } catch (err) {
+                console.log("error at produce", err)
+              }
+            })
+          await transport.produce(
+            {
+              track: videoTrack,
+              encodings:
+                [
+                  { maxBitrate: 100000 },
+                  { maxBitrate: 300000 },
+                  { maxBitrate: 900000 }
+                ],
+              codecOptions:
+              {
+                videoGoogleStartBitrate: 1000
+              }
+            });
+        }
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
           await localVideoRef.current.play();
+
         }
-      }}
+      }
+      }
     >Start Camera</button>
     <div className='my-20 mx-44 bg-black w-fit rounded-xl'>
       <video
-      className='rounded-xl'
+        className='rounded-xl'
         ref={localVideoRef}
         autoPlay
         playsInline
