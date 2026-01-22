@@ -1,22 +1,24 @@
 import express from "express";
 import { initRouter, initWebRtcServer } from "./worker.js";
 import { WebSocketServer } from "ws";
+import type { ProducerOptions } from "mediasoup/types";
 
 async function start() {
   const server = new WebSocketServer({ port: 8081 });
+   const webRtcServer = await initWebRtcServer();
   const router = await initRouter();
-  server.on("connection", async(socket) => {
+  server.on("connection", async (socket) => {
     console.log("Client connected");
-      const transport = await router.createWebRtcTransport({
-            webRtcServer,
-            enableUdp: true,
-            enableTcp: true,
-            preferUdp: true,
-            enableSctp: true,
-          });
+    const transport = await router.createWebRtcTransport({
+      webRtcServer,
+      enableUdp: true,
+      enableTcp: true,
+      preferUdp: true,
+      enableSctp: true,
+    });
     socket.on("message", async (message) => {
       const data = JSON.parse(message.toString());
-
+console.log("type->",data.type)
       switch (data.type) {
         case "getRtpCapabilities":
           socket.send(
@@ -27,7 +29,6 @@ async function start() {
           );
           break;
         case "createTransport":
-
           socket.send(
             JSON.stringify({
               type: "transportCreated",
@@ -40,19 +41,23 @@ async function start() {
           );
           break;
         case "transport-connect":
-
           await transport.connect({
-            dtlsParameters: {
-              role: "server",
-              fingerprints: [
-                {
-                  algorithm: "sha-256",
-                  value:
-                    "E5:F5:CA:A7:2D:93:E6:16:AC:21:09:9F:23:51:62:8C:D0:66:E9:0C:22:54:2B:82:0C:DF:E0:C5:2C:7E:CD:53",
-                },
-              ],
-            },
+            dtlsParameters: data.dtlsParameters,
           });
+
+          break;
+        case "transport-produce":
+          const producer = await transport.produce<ProducerOptions>({
+            id:data.id,
+            kind: data.kind,
+            rtpParameters: data.rtpParameters,
+            appData:data.appData
+          });
+          socket.send(JSON.stringify({
+            type:"produce-data",id:producer.id
+          }))
+          console.log("producer-id:",producer.id)
+          break
       }
     });
 
@@ -61,15 +66,9 @@ async function start() {
     });
   });
 
-  const webRtcServer = await initWebRtcServer();
+
   console.log(router.id);
-  const transport = await router.createWebRtcTransport({
-    webRtcServer,
-    enableUdp: true,
-    enableTcp: true,
-    preferUdp: true,
-    enableSctp: true,
-  });
+
 }
 
 start();

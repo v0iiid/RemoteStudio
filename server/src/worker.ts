@@ -46,6 +46,9 @@ export async function initRouter() {
 }
 
 export async function initWebRtcServer() {
+   if (!worker) {
+    await initWorker();
+  }
   const webRtcServer = await worker.createWebRtcServer(
   {
     listenInfos :
