@@ -1,12 +1,13 @@
 "use client"
 import * as mediasoupClient from 'mediasoup-client';
+import { TransportOptions } from 'mediasoup-client/types';
 import { useEffect, useRef, useState } from 'react';
 
 export default function Home() {
   const socketRef = useRef<WebSocket | null>(null);
   const deviceRef = useRef<mediasoupClient.Device | null>(null);
+  const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const [loaded, setLoaded] = useState(false);
-
 
   useEffect(() => {
     const ws = new WebSocket('ws://localhost:8081');
@@ -20,31 +21,40 @@ export default function Home() {
       ws.send(JSON.stringify({ type: 'getRtpCapabilities' }));
     };
 
-    ws.onmessage =async (event) => {
+    ws.onmessage = async (event) => {
 
       const data = JSON.parse(event.data)
 
-      console.log("data", data)
-      if (data.type == "rtpCapabilities") {
-        try{
-
+      switch (data.type) {
+        case "rtpCapabilities":
+          try {
             await device.load({ routerRtpCapabilities: data.rtpCapabilities })
+            setLoaded(true)
+            ws.send(JSON.stringify({ type: "createTransport" }));
+          } catch (err: any) {
+            if (err.name === "UnsupportedError") {
+              console.warn("Browser not supported");
+            } else {
+              console.error(err);
+            }
+          };
+          break;
+        case "transportCreated":
 
-           setLoaded(true)
-           console.log("Device loaded:", device.handlerName);
-        } catch (err: any) {
-          if (err.name === "UnsupportedError") {
-            console.warn("Browser not supported");
-          } else {
-            console.error(err);
+          try {
+            const transport = device.createSendTransport<TransportOptions>({
+              id: data.id,
+              iceParameters: data.iceParameters,
+              iceCandidates: data.iceCandidates,
+              dtlsParameters: data.dtlsParameters,
+              sctpParameters: data.sctpParameters
+            })
+
+          } catch (err: any) {
+            console.log("error in createTransport", err)
           }
-        }
-
       }
-
-      console.log("\n device loaded",device.handlerName)
     };
-
     ws.onerror = (err) => {
       console.error('WebSocket error', err);
     };
@@ -55,14 +65,12 @@ export default function Home() {
     }
   }, [])
 
-
-
   return <div className="font-medium p-2 text-xl text-green-500">
     <p>Show Logs</p>
     <button
       onClick={() => {
-          const device = deviceRef.current;
-          if (!device) return;
+        const device = deviceRef.current;
+        if (!device) return;
         console.log(device.handlerName)
         console.log(device.loaded)
       }}
@@ -70,5 +78,26 @@ export default function Home() {
     >
       Click
     </button>
+    <button
+      className='px-2 py-1 bg-green-400 text-white/90 rounded m-4 text-sm cursor-pointer'
+      onClick={async () => {
+        console.log("preseed")
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = stream;
+          await localVideoRef.current.play();
+        }
+      }}
+    >Start Camera</button>
+    <div className='my-20 mx-44 bg-black w-fit rounded-xl'>
+      <video
+      className='rounded-xl'
+        ref={localVideoRef}
+        autoPlay
+        playsInline
+        muted
+        width={400}
+        height={200} />
+    </div>
   </div>;
 }
