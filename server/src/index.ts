@@ -41,8 +41,9 @@ console.log("type->",data.type)
           );
           break;
         case "transport-connect":
+          console.log("dtls->",data.data)
           await transport.connect({
-            dtlsParameters: data.dtlsParameters,
+            dtlsParameters: data.data.dtlsParameters,
           });
 
           break;
