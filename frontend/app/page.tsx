@@ -8,12 +8,14 @@ export default function Home() {
   const deviceRef = useRef<mediasoupClient.Device | null>(null);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [publish,setPublish] =useState(false);
   const transportRef = useRef<Transport | null>(null)
+  const hasProducedRef =useRef<boolean>(false);
+
 
   useEffect(() => {
     const ws = new WebSocket('ws://localhost:8081');
     socketRef.current = ws;
-    const newDevice = new mediasoupClient.Device();
     const device = new mediasoupClient.Device();
     deviceRef.current = device;
 
@@ -25,8 +27,9 @@ export default function Home() {
     ws.onmessage = async (event) => {
 
       const data = JSON.parse(event.data)
-
+      console.log("type->", data.type)
       switch (data.type) {
+
         case "rtpCapabilities":
           try {
             await device.load({ routerRtpCapabilities: data.rtpCapabilities })
@@ -50,8 +53,9 @@ export default function Home() {
               dtlsParameters: data.dtlsParameters,
               sctpParameters: data.sctpParameters
             })
-            const params = data.dtlsParameters
+
             transport.on("connect", async ({ dtlsParameters }) => {
+              console.log("sending connect")
               try {
                 ws.send(JSON.stringify({
                   type: "transport-connect",
@@ -64,11 +68,41 @@ export default function Home() {
                 console.warn('error at connect')
               }
             })
-
+            transport.on("produce", (parameters) => {
+              try {
+                console.log("inside produce")
+                const ws = socketRef.current
+                if (!ws) return
+                console.log("sending produce")
+                ws.send(JSON.stringify({
+                  type: "transport-produce",
+                  data: {
+                    transportId: transport.id,
+                    kind: parameters.kind,
+                    rtpParameters: parameters.rtpParameters,
+                    appData: parameters.appData
+                  }
+                }))
+              } catch (err) {
+                console.log("error at produce", err)
+              }
+            })
+            transport.on("producedata", (parameters) => {
+              ws.send(JSON.stringify({
+                type: "transport-producedata",
+                data: {
+                  transportId: transport.id,
+                  sctpStreamParameters: parameters.sctpStreamParameters,
+                  label: parameters.label,
+                  protocol: parameters.protocol
+                }
+              }))
+            })
             transportRef.current = transport
           } catch (err: any) {
             console.log("error in createTransport", err)
           }
+          break;
       }
     };
     ws.onerror = (err) => {
@@ -77,19 +111,45 @@ export default function Home() {
 
     return () => {
       ws.close();
+      transportRef.current?.close()
+      localVideoRef.current?.pause();
       console.log('WebSocket closed')
     }
   }, [])
 
+  useEffect( () => {
+    const transport = transportRef.current;
+    if (!transport) return
+    if (!localVideoRef.current?.srcObject) return
+    const stream: MediaStream = localVideoRef.current.srcObject as MediaStream
+    const videoTrack = stream.getVideoTracks()[0];
+    const produce =async ()=>{
+
+      await transport.produce(
+      {
+        track: videoTrack,
+        encodings:
+          [
+            { maxBitrate: 100000 },
+            { maxBitrate: 300000 },
+            { maxBitrate: 900000 }
+          ],
+        codecOptions:
+        {
+          videoGoogleStartBitrate: 1000
+        }
+      });
+      hasProducedRef.current=true
+    }
+    if(!hasProducedRef.current){
+         produce()
+    }
+
+  }, [publish])
   return <div className="font-medium p-2 text-xl text-green-500">
     <p>Show Logs</p>
     <button
-      onClick={() => {
-        const device = deviceRef.current;
-        if (!device) return;
-        console.log(device.handlerName)
-        console.log(device.loaded)
-      }}
+
       className="bg-sky-400 py-1 px-2 border border-blue-500 text-white/90 text-sm rounded-sm cursor-pointer"
     >
       Click
@@ -97,47 +157,19 @@ export default function Home() {
     <button
       className='px-2 py-1 bg-green-400 text-white/90 rounded m-4 text-sm cursor-pointer'
       onClick={async () => {
+
         console.log("preseed")
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        const videoTrack = stream.getVideoTracks()[0];
-        const transport = transportRef.current
-        if (transport) {
-             transport.on("produce", (parameters) => {
-              try {
-                const ws =socketRef.current
-                if(!ws) return
-                ws.send(JSON.stringify({
-                  type:"transport-produce",
-                  data:{
-                    transportId: transport.id,
-                    kind: parameters.kind,
-                    rtpParameters: parameters.rtpParameters,
-                    appData: parameters.appData
-              }}))
-              } catch (err) {
-                console.log("error at produce", err)
-              }
-            })
-          await transport.produce(
-            {
-              track: videoTrack,
-              encodings:
-                [
-                  { maxBitrate: 100000 },
-                  { maxBitrate: 300000 },
-                  { maxBitrate: 900000 }
-                ],
-              codecOptions:
-              {
-                videoGoogleStartBitrate: 1000
-              }
-            });
-        }
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-          await localVideoRef.current.play();
 
+        if (localVideoRef.current) {
+          console.log("getting video")
+          localVideoRef.current.srcObject = stream;
+          await localVideoRef.current.play()
         }
+        if(transportRef.current && stream ){
+          setPublish(true)
+        }
+
       }
       }
     >Start Camera</button>
