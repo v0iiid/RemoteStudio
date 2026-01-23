@@ -8,9 +8,9 @@ export default function Home() {
   const deviceRef = useRef<mediasoupClient.Device | null>(null);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const [publish,setPublish] =useState(false);
+  const [publish, setPublish] = useState(false);
   const transportRef = useRef<Transport | null>(null)
-  const hasProducedRef =useRef<boolean>(false);
+  const hasProducedRef = useRef<boolean>(false);
 
 
   useEffect(() => {
@@ -57,11 +57,12 @@ export default function Home() {
             transport.on("connect", async ({ dtlsParameters }) => {
               console.log("sending connect")
               try {
+                console.log("dtls", dtlsParameters)
                 ws.send(JSON.stringify({
                   type: "transport-connect",
                   data: {
                     transportId: transport.id,
-                    dtlsParameters: dtlsParameters
+                    dtlsParameters
                   }
                 }))
               } catch (err: any) {
@@ -103,6 +104,15 @@ export default function Home() {
             console.log("error in createTransport", err)
           }
           break;
+        case "create-consumer":
+          device.createRecvTransport({
+            id: data.id,
+            iceParameters: data.iceParameters,
+            iceCandidates: data.iceCandidates,
+            dtlsParameters: data.dtlsParameters,
+            sctpParameters: data.sctpParameters
+
+          })
       }
     };
     ws.onerror = (err) => {
@@ -117,71 +127,83 @@ export default function Home() {
     }
   }, [])
 
-  useEffect( () => {
+  useEffect(() => {
     const transport = transportRef.current;
     if (!transport) return
     if (!localVideoRef.current?.srcObject) return
     const stream: MediaStream = localVideoRef.current.srcObject as MediaStream
     const videoTrack = stream.getVideoTracks()[0];
-    const produce =async ()=>{
+    const produce = async () => {
 
       await transport.produce(
-      {
-        track: videoTrack,
-        encodings:
-          [
-            { maxBitrate: 100000 },
-            { maxBitrate: 300000 },
-            { maxBitrate: 900000 }
-          ],
-        codecOptions:
         {
-          videoGoogleStartBitrate: 1000
-        }
-      });
-      hasProducedRef.current=true
+          track: videoTrack,
+          encodings:
+            [
+              { maxBitrate: 100000 },
+              { maxBitrate: 300000 },
+              { maxBitrate: 900000 }
+            ],
+          codecOptions:
+          {
+            videoGoogleStartBitrate: 1000
+          }
+        });
+      hasProducedRef.current = true
     }
-    if(!hasProducedRef.current){
-         produce()
+    if (!hasProducedRef.current) {
+      produce()
     }
 
   }, [publish])
   return <div className="font-medium p-2 text-xl text-green-500">
     <p>Show Logs</p>
     <button
-
       className="bg-sky-400 py-1 px-2 border border-blue-500 text-white/90 text-sm rounded-sm cursor-pointer"
     >
       Click
     </button>
-    <button
-      className='px-2 py-1 bg-green-400 text-white/90 rounded m-4 text-sm cursor-pointer'
-      onClick={async () => {
+    <div className='flex '>
+      <div>
+        <button
+          className='px-2 py-1 bg-green-400 text-white/90 rounded m-4 text-sm cursor-pointer'
+          onClick={async () => {
 
-        console.log("preseed")
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            console.log("preseed")
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
 
-        if (localVideoRef.current) {
-          console.log("getting video")
-          localVideoRef.current.srcObject = stream;
-          await localVideoRef.current.play()
-        }
-        if(transportRef.current && stream ){
-          setPublish(true)
-        }
+            if (localVideoRef.current) {
+              console.log("getting video")
+              localVideoRef.current.srcObject = stream;
+              await localVideoRef.current.play()
+            }
+            if (transportRef.current && stream) {
+              setPublish(true)
+            }
 
-      }
-      }
-    >Start Camera</button>
-    <div className='my-20 mx-44 bg-black w-fit rounded-xl'>
-      <video
-        className='rounded-xl'
-        ref={localVideoRef}
-        autoPlay
-        playsInline
-        muted
-        width={400}
-        height={200} />
+          }
+          }
+        >Start Camera</button>
+        <div className='my-20 mx-44 bg-black w-fit rounded-xl'>
+          <video
+            className='rounded-xl'
+            ref={localVideoRef}
+            autoPlay
+            playsInline
+            muted
+            width={400}
+            height={200} />
+        </div>
+      </div>
+      <div>
+        <button
+          onClick={() => {
+            const ws = socketRef.current;
+            if (!ws) return
+            ws.send(JSON.stringify({ type: "create-consumer" }))
+          }}
+          className='bg-sky-400 text-white px-2 py-1 text-sm cursor-pointer rounded-lg'>Consume</button>
+      </div>
     </div>
   </div>;
 }
