@@ -1,17 +1,20 @@
 "use client"
 import * as mediasoupClient from 'mediasoup-client';
-import { Transport, TransportOptions } from 'mediasoup-client/types';
+import { Consumer, Producer, Transport, TransportOptions } from 'mediasoup-client/types';
 import { useEffect, useRef, useState } from 'react';
 
 export default function Home() {
   const socketRef = useRef<WebSocket | null>(null);
   const deviceRef = useRef<mediasoupClient.Device | null>(null);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [publish, setPublish] = useState(false);
   const producerTransportRef = useRef<Transport | null>(null)
   const consumerTransportRef = useRef<Transport | null>(null)
   const hasProducedRef = useRef<boolean>(false);
+  const producerRef = useRef<Producer | null>(null)
+  const consumerRef = useRef<Consumer | null>(null)
 
 
   useEffect(() => {
@@ -79,7 +82,6 @@ export default function Home() {
                 ws.send(JSON.stringify({
                   type: "transport-produce",
                   data: {
-                    transportId: producerTransport.id,
                     kind: parameters.kind,
                     rtpParameters: parameters.rtpParameters,
                     appData: parameters.appData
@@ -113,7 +115,9 @@ export default function Home() {
             dtlsParameters: data.dtlsParameters,
             sctpParameters: data.sctpParameters
           })
+          console.log("goinge for connect")
           consumerTransport.on("connect", async ({ dtlsParameters }) => {
+            console.log("send for connect")
             try {
               ws.send(JSON.stringify({
                 type: "consumer-connect",
@@ -126,9 +130,46 @@ export default function Home() {
               console.log("err at consumerTransport", err)
             }
           })
+          console.log("at produce")
+
+
           consumerTransportRef.current = consumerTransport;
           break
-        case "consumerCreated":
+        case "consumer-connected":
+          const producer = producerRef.current
+          if (!producer) {
+            return
+          }
+          ws.send(JSON.stringify({
+            type: "consume",
+            data: {
+              id: producer.id,
+              rtpCapabilities: device.rtpCapabilities
+            }
+          }))
+          break;
+        case "newConsumer":
+          const consume = async () => {
+            const consumerTransport = consumerTransportRef.current
+            if (!consumerTransport) return;
+            const consumer = await consumerTransport.consume({
+              id: data.id,
+              producerId: data.producerId,
+              kind: data.kind,
+              rtpParameters: data.rtpParameters,
+            })
+            consumerRef.current = consumer;
+            const { track } = consumer;
+            if (!remoteVideoRef.current) return
+            remoteVideoRef.current.srcObject = new MediaStream([track])
+               ws.send(JSON.stringify({ type: "resume-consumer" }))
+          }
+          consume();
+          break;
+        case "consumer-resumed":
+          const consumer = consumerRef.current
+          if (!consumer) return
+          consumer.resume()
       }
     };
     ws.onerror = (err) => {
@@ -145,13 +186,14 @@ export default function Home() {
 
   useEffect(() => {
     const transport = producerTransportRef.current;
+
     if (!transport) return
     if (!localVideoRef.current?.srcObject) return
     const stream: MediaStream = localVideoRef.current.srcObject as MediaStream
     const videoTrack = stream.getVideoTracks()[0];
-    const produce = async () => {
 
-      await transport.produce(
+    const produce = async () => {
+      const producer = await transport.produce(
         {
           track: videoTrack,
           encodings:
@@ -165,6 +207,8 @@ export default function Home() {
             videoGoogleStartBitrate: 1000
           }
         });
+
+      producerRef.current = producer
       hasProducedRef.current = true
     }
     if (!hasProducedRef.current) {
@@ -184,10 +228,8 @@ export default function Home() {
         <button
           className='px-2 py-1 bg-green-400 text-white/90 rounded m-4 text-sm cursor-pointer'
           onClick={async () => {
-
             console.log("preseed")
             const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-
             if (localVideoRef.current) {
               console.log("getting video")
               localVideoRef.current.srcObject = stream;
@@ -196,10 +238,9 @@ export default function Home() {
             if (producerTransportRef.current && stream) {
               setPublish(true)
             }
-
-          }
-          }
-        >Start Camera</button>
+          }}>
+          Start Camera
+        </button>
         <div className='my-20 mx-44 bg-black w-fit rounded-xl'>
           <video
             className='rounded-xl'
@@ -212,13 +253,34 @@ export default function Home() {
         </div>
       </div>
       <div>
-        <button
-          onClick={() => {
-            const ws = socketRef.current;
-            if (!ws) return
-            ws.send(JSON.stringify({ type: "create-consumerTransport" }))
-          }}
-          className='bg-sky-400 text-white px-2 py-1 text-sm cursor-pointer rounded-lg'>Consume</button>
+        <div className='flex gap-2'>
+          <button
+            onClick={() => {
+              const ws = socketRef.current;
+              if (!ws) return
+              ws.send(JSON.stringify({ type: "create-consumerTransport" }))
+            }}
+            className='bg-sky-400 text-white px-2 py-1 text-sm cursor-pointer rounded-lg'>Consume</button>
+          <button
+            className='bg-green-400 px-2 py-1 text-sm text-white rounded-xl cursor-pointer'
+            onClick={async () => {
+
+
+              if (!remoteVideoRef.current) return
+              await remoteVideoRef.current.play()
+            }}>Play Vid</button>
+        </div>
+        <div className='my-20 mx-44 bg-black w-fit rounded-xl'>
+
+          <video
+            className='rounded-xl'
+            ref={remoteVideoRef}
+            autoPlay
+            playsInline
+            muted
+            width={400}
+            height={200} />
+        </div>
       </div>
     </div>
   </div>;
