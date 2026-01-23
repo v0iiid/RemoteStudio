@@ -104,7 +104,7 @@ export default function Home() {
             console.log("error in createTransport", err)
           }
           break;
-        case "create-consumer":
+        case "consumerTransportCreated":
           device.createRecvTransport({
             id: data.id,
             iceParameters: data.iceParameters,
@@ -113,6 +113,8 @@ export default function Home() {
             sctpParameters: data.sctpParameters
 
           })
+          break
+        case "consumerCreated":
       }
     };
     ws.onerror = (err) => {
@@ -200,7 +202,7 @@ export default function Home() {
           onClick={() => {
             const ws = socketRef.current;
             if (!ws) return
-            ws.send(JSON.stringify({ type: "create-consumer" }))
+            ws.send(JSON.stringify({ type: "create-consumerTransport" }))
           }}
           className='bg-sky-400 text-white px-2 py-1 text-sm cursor-pointer rounded-lg'>Consume</button>
       </div>
