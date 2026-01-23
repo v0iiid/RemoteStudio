@@ -162,14 +162,11 @@ export default function Home() {
             const { track } = consumer;
             if (!remoteVideoRef.current) return
             remoteVideoRef.current.srcObject = new MediaStream([track])
-               ws.send(JSON.stringify({ type: "resume-consumer" }))
+
           }
           consume();
           break;
-        case "consumer-resumed":
-          const consumer = consumerRef.current
-          if (!consumer) return
-          consumer.resume()
+
       }
     };
     ws.onerror = (err) => {
