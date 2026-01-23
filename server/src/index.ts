@@ -117,17 +117,14 @@ async function start() {
                 rtpParameters: consumer.rtpParameters,
               }),
             );
+            consumer.resume();
           } else {
             console.log("error at consumer");
             return;
           }
 
           break;
-          case "resume-consumer":
-            consumer.resume();
-            socket.send(JSON.stringify({
-              type:"consumer-resumed"
-            }))
+
       }
     });
 
