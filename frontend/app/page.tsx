@@ -10,7 +10,7 @@ export default function Home() {
   const [loaded, setLoaded] = useState(false);
   const [publish, setPublish] = useState(false);
   const producerTransportRef = useRef<Transport | null>(null)
-  const consumerproducerTransportRef = useRef<Transport | null>(null)
+  const consumerTransportRef = useRef<Transport | null>(null)
   const hasProducedRef = useRef<boolean>(false);
 
 
@@ -47,7 +47,7 @@ export default function Home() {
         case "transportCreated":
 
           try {
-            const transport = device.createSendTransport<TransportOptions>({
+            const producerTransport = device.createSendTransport<TransportOptions>({
               id: data.id,
               iceParameters: data.iceParameters,
               iceCandidates: data.iceCandidates,
@@ -55,14 +55,14 @@ export default function Home() {
               sctpParameters: data.sctpParameters
             })
 
-            transport.on("connect", async ({ dtlsParameters }) => {
+            producerTransport.on("connect", async ({ dtlsParameters }) => {
               console.log("sending connect")
               try {
                 console.log("dtls", dtlsParameters)
                 ws.send(JSON.stringify({
                   type: "transport-connect",
                   data: {
-                    transportId: transport.id,
+                    transportId: producerTransport.id,
                     dtlsParameters
                   }
                 }))
@@ -70,7 +70,7 @@ export default function Home() {
                 console.warn('error at connect')
               }
             })
-            transport.on("produce", (parameters) => {
+            producerTransport.on("produce", (parameters) => {
               try {
                 console.log("inside produce")
                 const ws = socketRef.current
@@ -79,7 +79,7 @@ export default function Home() {
                 ws.send(JSON.stringify({
                   type: "transport-produce",
                   data: {
-                    transportId: transport.id,
+                    transportId: producerTransport.id,
                     kind: parameters.kind,
                     rtpParameters: parameters.rtpParameters,
                     appData: parameters.appData
@@ -89,30 +89,44 @@ export default function Home() {
                 console.log("error at produce", err)
               }
             })
-            transport.on("producedata", (parameters) => {
+            producerTransport.on("producedata", (parameters) => {
               ws.send(JSON.stringify({
                 type: "transport-producedata",
                 data: {
-                  transportId: transport.id,
+                  transportId: producerTransport.id,
                   sctpStreamParameters: parameters.sctpStreamParameters,
                   label: parameters.label,
                   protocol: parameters.protocol
                 }
               }))
             })
-            producerTransportRef.current = transport
+            producerTransportRef.current = producerTransport
           } catch (err: any) {
             console.log("error in createTransport", err)
           }
           break;
         case "consumerTransportCreated":
-          device.createRecvTransport({
+          const consumerTransport = device.createRecvTransport({
             id: data.id,
             iceParameters: data.iceParameters,
             iceCandidates: data.iceCandidates,
             dtlsParameters: data.dtlsParameters,
             sctpParameters: data.sctpParameters
           })
+          consumerTransport.on("connect", async ({ dtlsParameters }) => {
+            try {
+              ws.send(JSON.stringify({
+                type: "consumer-connect",
+                data: {
+                  transportId: consumerTransport.id,
+                  dtlsParameters: dtlsParameters
+                }
+              }))
+            } catch (err) {
+              console.log("err at consumerTransport", err)
+            }
+          })
+          consumerTransportRef.current = consumerTransport;
           break
         case "consumerCreated":
       }
