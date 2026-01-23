@@ -10,7 +10,7 @@ async function start() {
   server.on("connection", async (socket) => {
     console.log("Client connected");
     let producerTransport: WebRtcTransport;
-    let consumerTransport: Consumer;
+    let consumerTransport: WebRtcTransport;
     socket.on("message", async (message) => {
       const data = JSON.parse(message.toString());
       console.log("type->", data.type);
@@ -48,8 +48,8 @@ async function start() {
           await producerTransport.connect({
             dtlsParameters: data.data.dtlsParameters,
           });
-
           break;
+
         case "transport-produce":
           const producer = await producerTransport.produce<ProducerOptions>({
             id: data.id,
@@ -65,15 +65,31 @@ async function start() {
           );
           console.log("producer-id:", producer.id);
           break;
-        case "create-consumer":
-
-          socket.send(
+        case "create-consumerTransport":
+          consumerTransport = await router.createWebRtcTransport({
+            webRtcServer,
+            enableUdp: true,
+            enableTcp: true,
+            preferUdp: true,
+            enableSctp: true,
+          });
+         socket.send(
             JSON.stringify({
-              type: "consumerCreated",
-              id: consumer.id,
+              type: "consumerTransportCreated",
+              id: producerTransport.id,
+              iceParameters: producerTransport.iceParameters,
+              iceCandidates: producerTransport.iceCandidates,
+              dtlsParameters: producerTransport.dtlsParameters,
+              sctpParameters: producerTransport.sctpParameters,
             }),
           );
+          break;
 
+          case "consumer-connect":
+          console.log("consumer connnect");
+          await consumerTransport.connect({
+            dtlsParameters:data.data.dtlsParameters
+          })
           break;
       }
     });
