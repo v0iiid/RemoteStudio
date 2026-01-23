@@ -9,7 +9,8 @@ export default function Home() {
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [publish, setPublish] = useState(false);
-  const transportRef = useRef<Transport | null>(null)
+  const producerTransportRef = useRef<Transport | null>(null)
+  const consumerproducerTransportRef = useRef<Transport | null>(null)
   const hasProducedRef = useRef<boolean>(false);
 
 
@@ -99,7 +100,7 @@ export default function Home() {
                 }
               }))
             })
-            transportRef.current = transport
+            producerTransportRef.current = transport
           } catch (err: any) {
             console.log("error in createTransport", err)
           }
@@ -111,7 +112,6 @@ export default function Home() {
             iceCandidates: data.iceCandidates,
             dtlsParameters: data.dtlsParameters,
             sctpParameters: data.sctpParameters
-
           })
           break
         case "consumerCreated":
@@ -123,14 +123,14 @@ export default function Home() {
 
     return () => {
       ws.close();
-      transportRef.current?.close()
+      producerTransportRef.current?.close()
       localVideoRef.current?.pause();
       console.log('WebSocket closed')
     }
   }, [])
 
   useEffect(() => {
-    const transport = transportRef.current;
+    const transport = producerTransportRef.current;
     if (!transport) return
     if (!localVideoRef.current?.srcObject) return
     const stream: MediaStream = localVideoRef.current.srcObject as MediaStream
@@ -179,7 +179,7 @@ export default function Home() {
               localVideoRef.current.srcObject = stream;
               await localVideoRef.current.play()
             }
-            if (transportRef.current && stream) {
+            if (producerTransportRef.current && stream) {
               setPublish(true)
             }
 
