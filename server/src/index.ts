@@ -25,6 +25,7 @@ async function start() {
   const router = await initRouter();
   server.on("connection", async (socket) => {
     console.log("Client connected");
+    let currentRoomId = '';
     let producerTransport: WebRtcTransport;
     let consumerTransport: WebRtcTransport;
     let producer: Producer;
@@ -35,13 +36,34 @@ async function start() {
 
       switch (data.type) {
         case "create-room":
-          const roomId = createRoomId();
-          socket.send(JSON.stringify({type:"room-created",roomId}))
-          rooms.set(roomId,{
-            peers:new Set()
-          })
-          break;
+          const newRoomId = createRoomId();
+          socket.send(JSON.stringify({ type: "room-created", newRoomId }));
+          rooms.set(newRoomId, {
+            peers: new Set(),
+          });
 
+          break;
+        case "join-room":
+          const { joinRoomId } = data;
+          if (!rooms.has(joinRoomId)) {
+            rooms.set(joinRoomId, {
+              peers: new Set(),
+            });
+          }
+          rooms.get(joinRoomId).peers.add(socket);
+          currentRoomId = joinRoomId;
+
+          socket.send(JSON.stringify({ type: "joined-room", joinRoomId, peerCount: rooms.get(joinRoomId).peers.size }));
+          break;
+        case "close":
+          if (!currentRoomId) return;
+
+          const room = rooms.get(currentRoomId);
+          if (!room) return;
+
+          room.peers.delete(socket);
+
+          break;
         case "getRtpCapabilities":
           socket.send(
             JSON.stringify({
