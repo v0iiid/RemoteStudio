@@ -53,14 +53,17 @@ async function start() {
           );
           break;
         case "transport-connect":
-          console.log("dtls->", data.data);
           await producerTransport.connect({
             dtlsParameters: data.data.dtlsParameters,
           });
           break;
-
+        case "consumer-connect":
+          await consumerTransport.connect({
+            dtlsParameters:data.data.dtlsParameters
+          })
+          socket.send(JSON.stringify({type:"consumer-connected"}))
+          break
         case "transport-produce":
-
           producer = await producerTransport.produce<ProducerOptions>({
             kind: data.data.kind,
             rtpParameters: data.data.rtpParameters,
@@ -94,37 +97,44 @@ async function start() {
           );
           break;
 
-        case "consumer-connect":
-          console.log("consumer connnect");
-          await consumerTransport.connect({
-            dtlsParameters: data.data.dtlsParameters,
-          });
-          socket.send(JSON.stringify({type:"consumer-connected"}))
-          break;
         case "consume":
-          console.log("consumer_>", data);
-          if (router.canConsume({ producerId: data.data.id, rtpCapabilities: data.data.rtpCapabilities })) {
-            consumer = await consumerTransport.consume({
-              producerId: data.data.id,
+          if (!producer || !consumerTransport) return;
+
+          if (
+            !router.canConsume({
+              producerId: producer.id,
               rtpCapabilities: data.data.rtpCapabilities,
-            });
-            socket.send(
-              JSON.stringify({
-                type: "newConsumer",
-                id: consumer.id,
-                producerId: data.data.id,
-                kind: consumer.kind,
-                rtpParameters: consumer.rtpParameters,
-              }),
-            );
-            consumer.resume();
-          } else {
-            console.log("error at consumer");
+            })
+          ){
+            console.log("the router can't consume")
             return;
           }
+          console.log("can it consumer",router.canConsume({ producerId: producer.id,
+              rtpCapabilities: data.data.rtpCapabilities,}))
+          consumer = await consumerTransport.consume({
+            producerId: producer.id,
+            rtpCapabilities: data.data.rtpCapabilities,
+            paused: true,
+          });
 
+          socket.send(
+            JSON.stringify({
+              type: "newConsumer",
+              id: consumer.id,
+              producerId: producer.id,
+              kind: consumer.kind,
+              rtpParameters: consumer.rtpParameters,
+            }),
+          );
           break;
 
+        case "consumer-ready":
+          console.log("is consumer-ready")
+          if (consumer) {
+              await consumer.requestKeyFrame();
+            await consumer.resume();
+             console.log("consumer resumed on backend");
+          }
       }
     });
 
