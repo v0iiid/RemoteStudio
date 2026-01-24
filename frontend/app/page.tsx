@@ -17,6 +17,7 @@ export default function Home() {
   const consumerRef = useRef<Consumer | null>(null)
 
 
+  let produceCallback: ((data: { id: string }) => void) | null = null;
   useEffect(() => {
     const ws = new WebSocket('ws://localhost:8081');
     socketRef.current = ws;
@@ -29,11 +30,9 @@ export default function Home() {
     };
 
     ws.onmessage = async (event) => {
-
       const data = JSON.parse(event.data)
       console.log("type->", data.type)
       switch (data.type) {
-
         case "rtpCapabilities":
           try {
             await device.load({ routerRtpCapabilities: data.rtpCapabilities })
@@ -48,7 +47,6 @@ export default function Home() {
           };
           break;
         case "transportCreated":
-
           try {
             const producerTransport = device.createSendTransport<TransportOptions>({
               id: data.id,
@@ -58,10 +56,9 @@ export default function Home() {
               sctpParameters: data.sctpParameters
             })
 
-            producerTransport.on("connect", async ({ dtlsParameters }) => {
-              console.log("sending connect")
+            producerTransport.on("connect", async ({ dtlsParameters }, callback) => {
               try {
-                console.log("dtls", dtlsParameters)
+                console.log("calling connect")
                 ws.send(JSON.stringify({
                   type: "transport-connect",
                   data: {
@@ -69,39 +66,36 @@ export default function Home() {
                     dtlsParameters
                   }
                 }))
+                callback();
               } catch (err: any) {
                 console.warn('error at connect')
               }
             })
-            producerTransport.on("produce", (parameters) => {
+            producerTransport.on("produce", (parameters, callback, errback) => {
               try {
-                console.log("inside produce")
-                const ws = socketRef.current
-                if (!ws) return
-                console.log("sending produce")
+                console.log("calling produce")
+                const ws = socketRef.current;
+                if (!ws) return;
+
+                produceCallback = callback;
+
                 ws.send(JSON.stringify({
                   type: "transport-produce",
                   data: {
+                    transportId: producerTransport.id,
                     kind: parameters.kind,
                     rtpParameters: parameters.rtpParameters,
                     appData: parameters.appData
                   }
-                }))
-              } catch (err) {
-                console.log("error at produce", err)
+                }));
+              } catch (err: any) {
+                errback(err);
               }
-            })
-            producerTransport.on("producedata", (parameters) => {
-              ws.send(JSON.stringify({
-                type: "transport-producedata",
-                data: {
-                  transportId: producerTransport.id,
-                  sctpStreamParameters: parameters.sctpStreamParameters,
-                  label: parameters.label,
-                  protocol: parameters.protocol
-                }
-              }))
-            })
+            });
+            producerTransport.on('connectionstatechange', (state) => {
+              console.log('TRANSPORT STATE →', state);
+            });
+
             producerTransportRef.current = producerTransport
           } catch (err: any) {
             console.log("error in createTransport", err)
@@ -115,56 +109,77 @@ export default function Home() {
             dtlsParameters: data.dtlsParameters,
             sctpParameters: data.sctpParameters
           })
-          console.log("goinge for connect")
-          consumerTransport.on("connect", async ({ dtlsParameters }) => {
-            console.log("send for connect")
+          consumerTransportRef.current = consumerTransport;
+
+          consumerTransport.on("connect", async ({ dtlsParameters }, callback) => {
             try {
               ws.send(JSON.stringify({
                 type: "consumer-connect",
-                data: {
-                  transportId: consumerTransport.id,
-                  dtlsParameters: dtlsParameters
-                }
-              }))
+                data: { transportId: consumerTransport.id, dtlsParameters }
+              }));
+              callback();
             } catch (err) {
-              console.log("err at consumerTransport", err)
+              console.log(err);
             }
-          })
-          console.log("at produce")
+          });
 
+          consumerTransport.on("connectionstatechange", (state) => {
+            console.log("Consumer transport state:", state);
 
-          consumerTransportRef.current = consumerTransport;
-          break
-        case "consumer-connected":
-          const producer = producerRef.current
-          if (!producer) {
-            return
-          }
+            if (state === "connected") {
+              socketRef.current?.send(
+                JSON.stringify({ type: "consumer-ready" })
+              );
+            }
+          });
+          consumerTransport.on('connectionstatechange', (state) => {
+            console.log('TRANSPORT STATE →', state);
+          });
+
           ws.send(JSON.stringify({
             type: "consume",
-            data: {
-              id: producer.id,
-              rtpCapabilities: device.rtpCapabilities
-            }
-          }))
+            data: { rtpCapabilities: device.rtpCapabilities }
+          }));
+          break;
+        case "produce-data":
+          produceCallback?.({ id: data.id });
+          produceCallback = null;
+          console.log("Producer confirmed:", data.id);
           break;
         case "newConsumer":
-          const consume = async () => {
-            const consumerTransport = consumerTransportRef.current
-            if (!consumerTransport) return;
+          (async () => {
+            const consumerTransport = consumerTransportRef.current!;
+
             const consumer = await consumerTransport.consume({
               id: data.id,
               producerId: data.producerId,
               kind: data.kind,
               rtpParameters: data.rtpParameters,
-            })
-            consumerRef.current = consumer;
-            const { track } = consumer;
-            if (!remoteVideoRef.current) return
-            remoteVideoRef.current.srcObject = new MediaStream([track])
+            });
 
-          }
-          consume();
+            consumerRef.current = consumer;
+
+            // 🔥 CRITICAL
+            await consumer.resume();
+
+            const track = consumer.track;
+
+            // 🔥 WAIT for actual media flow
+            if (track.muted) {
+              await new Promise<void>((resolve) => {
+                track.onunmute = () => resolve();
+              });
+            }
+
+            const stream = new MediaStream([track]);
+
+            const video = remoteVideoRef.current!;
+            video.srcObject = stream;
+            video.muted = true;
+            await video.play();
+
+            console.log("Remote video playing");
+          })();
           break;
 
       }
@@ -175,8 +190,13 @@ export default function Home() {
 
     return () => {
       ws.close();
+      producerRef.current?.close();
+      consumerRef.current?.close();
+      producerTransportRef.current?.close();
+      consumerTransportRef.current?.close();
       producerTransportRef.current?.close()
-      localVideoRef.current?.pause();
+      localVideoRef.current?.pause()
+
       console.log('WebSocket closed')
     }
   }, [])
@@ -188,8 +208,9 @@ export default function Home() {
     if (!localVideoRef.current?.srcObject) return
     const stream: MediaStream = localVideoRef.current.srcObject as MediaStream
     const videoTrack = stream.getVideoTracks()[0];
-
+    console.log("Local video tracks", (localVideoRef.current?.srcObject as MediaStream).getVideoTracks());
     const produce = async () => {
+      console.log("calling produce")
       const producer = await transport.produce(
         {
           track: videoTrack,
@@ -211,7 +232,6 @@ export default function Home() {
     if (!hasProducedRef.current) {
       produce()
     }
-
   }, [publish])
   return <div className="font-medium p-2 text-xl text-green-500">
     <p>Show Logs</p>
@@ -220,7 +240,7 @@ export default function Home() {
     >
       Click
     </button>
-    <div className='flex '>
+    <div className='flex'>
       <div>
         <button
           className='px-2 py-1 bg-green-400 text-white/90 rounded m-4 text-sm cursor-pointer'
@@ -242,9 +262,10 @@ export default function Home() {
           <video
             className='rounded-xl'
             ref={localVideoRef}
-            autoPlay
+
             playsInline
             muted
+            controls
             width={400}
             height={200} />
         </div>
@@ -258,23 +279,21 @@ export default function Home() {
               ws.send(JSON.stringify({ type: "create-consumerTransport" }))
             }}
             className='bg-sky-400 text-white px-2 py-1 text-sm cursor-pointer rounded-lg'>Consume</button>
-          <button
-            className='bg-green-400 px-2 py-1 text-sm text-white rounded-xl cursor-pointer'
-            onClick={async () => {
-
-
-              if (!remoteVideoRef.current) return
-              await remoteVideoRef.current.play()
-            }}>Play Vid</button>
         </div>
         <div className='my-20 mx-44 bg-black w-fit rounded-xl'>
-
+          <button
+            onClick={() => remoteVideoRef.current?.play()}
+            className="bg-blue-500 text-white px-2 py-1 rounded"
+          >
+            Play Remote Video
+          </button>
           <video
             className='rounded-xl'
             ref={remoteVideoRef}
-            autoPlay
+
             playsInline
             muted
+            controls
             width={400}
             height={200} />
         </div>
