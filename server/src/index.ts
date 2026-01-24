@@ -9,6 +9,15 @@ import {
   type Transport,
   type WebRtcTransport,
 } from "mediasoup/types";
+import crypto from "crypto";
+
+const rooms = new Map();
+
+function createRoomId() {
+  const roomId = crypto.randomBytes(4).toString("hex");
+  console.log("room id:", roomId);
+  return roomId;
+}
 
 async function start() {
   const server = new WebSocketServer({ port: 8081 });
@@ -25,6 +34,14 @@ async function start() {
       console.log("type->", data.type);
 
       switch (data.type) {
+        case "create-room":
+          const roomId = createRoomId();
+          socket.send(JSON.stringify({type:"room-created",roomId}))
+          rooms.set(roomId,{
+            peers:new Set()
+          })
+          break;
+
         case "getRtpCapabilities":
           socket.send(
             JSON.stringify({
@@ -59,10 +76,10 @@ async function start() {
           break;
         case "consumer-connect":
           await consumerTransport.connect({
-            dtlsParameters:data.data.dtlsParameters
-          })
-          socket.send(JSON.stringify({type:"consumer-connected"}))
-          break
+            dtlsParameters: data.data.dtlsParameters,
+          });
+          socket.send(JSON.stringify({ type: "consumer-connected" }));
+          break;
         case "transport-produce":
           producer = await producerTransport.produce<ProducerOptions>({
             kind: data.data.kind,
@@ -105,12 +122,14 @@ async function start() {
               producerId: producer.id,
               rtpCapabilities: data.data.rtpCapabilities,
             })
-          ){
-            console.log("the router can't consume")
+          ) {
+            console.log("the router can't consume");
             return;
           }
-          console.log("can it consumer",router.canConsume({ producerId: producer.id,
-              rtpCapabilities: data.data.rtpCapabilities,}))
+          console.log(
+            "can it consumer",
+            router.canConsume({ producerId: producer.id, rtpCapabilities: data.data.rtpCapabilities }),
+          );
           consumer = await consumerTransport.consume({
             producerId: producer.id,
             rtpCapabilities: data.data.rtpCapabilities,
@@ -129,11 +148,11 @@ async function start() {
           break;
 
         case "consumer-ready":
-          console.log("is consumer-ready")
+          console.log("is consumer-ready");
           if (consumer) {
-              await consumer.requestKeyFrame();
+            await consumer.requestKeyFrame();
             await consumer.resume();
-             console.log("consumer resumed on backend");
+            console.log("consumer resumed on backend");
           }
       }
     });
