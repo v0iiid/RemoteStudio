@@ -78,3 +78,7 @@ export function getContext(socket: WebSocket) {
   if (!peer) return;
   return { roomId, room, peerId, peer, router };
 }
+
+export function sendJson(socket:WebSocket,data:any){
+  socket.send(JSON.stringify(data))
+}

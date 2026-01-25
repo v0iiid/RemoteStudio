@@ -11,7 +11,7 @@ import {
   type WebRtcTransport,
 } from "mediasoup/types";
 import crypto, { randomUUID, type UUID } from "crypto";
-import { cleanupPeer, createRoom, getContext, getRoomAndRouter } from "./utils.js";
+import { cleanupPeer, createRoom, getContext, getRoomAndRouter, sendJson } from "./utils.js";
 
 export interface Peer {
   id: string;
@@ -62,7 +62,7 @@ async function start() {
       switch (data.type) {
         case "create-room": {
           const roomId = createRoomId();
-          socket.send(JSON.stringify({ type: "room-created", roomId }));
+          sendJson(socket, { type: "room-created", roomId });
 
           const room = await createRoom(roomId, worker);
           const peerId = createPeerId();
@@ -104,14 +104,13 @@ async function start() {
           room.peers.set(peerId, peer);
           peerIdToRoomId.set(peerId, room.id);
           wsToPeerId.set(socket, peerId);
-          socket.send(
-            JSON.stringify({
-              type: "joined-room",
-              joinRoomId,
-              peerId,
-              peerCount: room.peers.size,
-            }),
-          );
+          sendJson(socket, {
+            type: "joined-room",
+            joinRoomId,
+            peerId,
+            peerCount: room.peers.size,
+          });
+
           break;
         }
 
@@ -131,12 +130,11 @@ async function start() {
           if (!roomId) return;
           const data = getRoomAndRouter(roomId);
           if (!data) return;
-          socket.send(
-            JSON.stringify({
-              type: "rtpCapabilities",
-              rtpCapabilities: data.router.rtpCapabilities,
-            }),
-          );
+          sendJson(socket, {
+            type: "rtpCapabilities",
+            rtpCapabilities: data.router.rtpCapabilities,
+          });
+
           break;
         }
         case "createTransport": {
@@ -152,16 +150,15 @@ async function start() {
           });
 
           peer.producerTransport = producerTransport;
-          socket.send(
-            JSON.stringify({
-              type: "transportCreated",
-              id: producerTransport.id,
-              iceParameters: producerTransport.iceParameters,
-              iceCandidates: producerTransport.iceCandidates,
-              dtlsParameters: producerTransport.dtlsParameters,
-              sctpParameters: producerTransport.sctpParameters,
-            }),
-          );
+          sendJson(socket, {
+            type: "transportCreated",
+            id: producerTransport.id,
+            iceParameters: producerTransport.iceParameters,
+            iceCandidates: producerTransport.iceCandidates,
+            dtlsParameters: producerTransport.dtlsParameters,
+            sctpParameters: producerTransport.sctpParameters,
+          });
+
           break;
         }
         case "transport-connect": {
@@ -189,7 +186,7 @@ async function start() {
           await peer.consumerTransport.connect({
             dtlsParameters: dtlsParameters,
           });
-          socket.send(JSON.stringify({ type: "consumer-connected" }));
+          sendJson(socket, { type: "consumer-connected" });
           break;
         }
 
@@ -207,12 +204,11 @@ async function start() {
             appData: appData,
           });
           peer.producers.set(producer.id, producer);
-          socket.send(
-            JSON.stringify({
-              type: "produce-data",
-              id: producer.id,
-            }),
-          );
+          sendJson(socket, {
+            type: "produce-data",
+            id: producer.id,
+          });
+
           console.log("producer-id:", producer.id);
           break;
         }
@@ -228,16 +224,15 @@ async function start() {
             enableSctp: true,
           });
           peer.consumerTransport = consumerTransport;
-          socket.send(
-            JSON.stringify({
-              type: "consumerTransportCreated",
-              id: consumerTransport.id,
-              iceParameters: consumerTransport.iceParameters,
-              iceCandidates: consumerTransport.iceCandidates,
-              dtlsParameters: consumerTransport.dtlsParameters,
-              sctpParameters: consumerTransport.sctpParameters,
-            }),
-          );
+          sendJson(socket, {
+            type: "consumerTransportCreated",
+            id: consumerTransport.id,
+            iceParameters: consumerTransport.iceParameters,
+            iceCandidates: consumerTransport.iceCandidates,
+            dtlsParameters: consumerTransport.dtlsParameters,
+            sctpParameters: consumerTransport.sctpParameters,
+          });
+
           break;
         }
         case "consume": {
@@ -266,15 +261,14 @@ async function start() {
             paused: true,
           });
           peer.consumers.set(consumer.id, consumer);
-          socket.send(
-            JSON.stringify({
+          sendJson(socket,{
               type: "newConsumer",
               id: consumer.id,
               producerId: producerId,
               kind: consumer.kind,
               rtpParameters: consumer.rtpParameters,
-            }),
-          );
+            })
+
           break;
         }
         case "consumer-ready": {
@@ -297,8 +291,8 @@ async function start() {
 
     socket.on("close", () => {
       const ctx = getContext(socket);
-          if (!ctx) return;
-          const { roomId } = ctx;
+      if (!ctx) return;
+      const { roomId } = ctx;
       if (!roomId) return;
       console.log("Client disconnected");
       cleanupPeer(socket, roomId);
