@@ -11,9 +11,9 @@ import {
   type WebRtcTransport,
 } from "mediasoup/types";
 import crypto, { randomUUID, type UUID } from "crypto";
-import { cleanupPeer, createRoom, getRoomAndRouter } from "./utils.js";
+import { cleanupPeer, createRoom, getRoomAndRouter, getRoomId } from "./utils.js";
 
-interface Peer {
+export interface Peer {
   id: string;
   roomId: string;
   ws: WebSocket;
@@ -32,6 +32,8 @@ export interface Room {
 }
 
 export const wsToPeerId: Map<WebSocket, string> = new Map();
+
+export const peerIdToRoomId = new Map<string, string>();
 
 export const rooms: Map<string, Room> = new Map();
 
@@ -52,7 +54,6 @@ async function start() {
   const worker = await initWorker();
   server.on("connection", async (socket) => {
     console.log("Client connected");
-    let currentRoomId: string | null = null;
 
     socket.on("message", async (message) => {
       const data = JSON.parse(message.toString());
@@ -61,7 +62,6 @@ async function start() {
       switch (data.type) {
         case "create-room": {
           const roomId = createRoomId();
-          currentRoomId = roomId;
           socket.send(JSON.stringify({ type: "room-created", roomId }));
 
           const room = await createRoom(roomId, worker);
@@ -75,7 +75,7 @@ async function start() {
             producers: new Map(),
             consumers: new Map(),
           };
-
+          peerIdToRoomId.set(peerId, roomId);
           room.peers.set(peerId, peer);
           rooms.set(roomId, room);
           wsToPeerId.set(socket, peerId);
@@ -89,7 +89,6 @@ async function start() {
             const newRoom = await createRoom(joinRoomId, worker);
             rooms.set(joinRoomId, newRoom);
           }
-          currentRoomId = joinRoomId;
           const room = rooms.get(joinRoomId)!;
 
           const peerId = createPeerId();
@@ -103,7 +102,7 @@ async function start() {
             consumers: new Map(),
           };
           room.peers.set(peerId, peer);
-          currentRoomId = joinRoomId;
+          peerIdToRoomId.set(peerId, room.id);
           wsToPeerId.set(socket, peerId);
           socket.send(
             JSON.stringify({
@@ -117,13 +116,18 @@ async function start() {
         }
 
         case "close": {
-          if (!currentRoomId) return;
-          cleanupPeer(socket, currentRoomId);
+          const peerId = wsToPeerId.get(socket);
+          if (!peerId) return;
+          const roomId = peerIdToRoomId.get(peerId);
+          if (!roomId) return;
+
+          cleanupPeer(socket, roomId);
           break;
         }
         case "getRtpCapabilities": {
-          if(!currentRoomId) return
-          const data = getRoomAndRouter(currentRoomId);
+          const roomId = getRoomId(socket);
+          if (!roomId) return;
+          const data = getRoomAndRouter(roomId);
           if (!data) return;
           socket.send(
             JSON.stringify({
@@ -134,8 +138,9 @@ async function start() {
           break;
         }
         case "createTransport": {
-          if(!currentRoomId) return;
-          const { room, router } = getRoomAndRouter(currentRoomId) ?? {};
+          const roomId = getRoomId(socket);
+          if (!roomId) return;
+          const { room, router } = getRoomAndRouter(roomId) ?? {};
           if (!room || !router) return;
           const producerTransport = await router.createWebRtcTransport({
             webRtcServer,
@@ -145,7 +150,7 @@ async function start() {
             enableSctp: true,
           });
           const peerId = wsToPeerId.get(socket);
-          if (!peerId || !currentRoomId) return;
+          if (!peerId || !roomId) return;
 
           const peer = room.peers.get(peerId);
           if (!peer) return;
@@ -164,9 +169,10 @@ async function start() {
           break;
         }
         case "transport-connect": {
-          if(!currentRoomId) return;
+          const roomId = getRoomId(socket);
+          if (!roomId) return;
           const { dtlsParameters } = data;
-          const { room, router } = getRoomAndRouter(currentRoomId) ?? {};
+          const { room, router } = getRoomAndRouter(roomId) ?? {};
           if (!room || !router) return;
 
           const peerId = wsToPeerId.get(socket);
@@ -182,9 +188,10 @@ async function start() {
         }
 
         case "consumer-connect": {
-          if(!currentRoomId) return;
+          const roomId = getRoomId(socket);
+          if (!roomId) return;
           const { dtlsParameters } = data;
-          const { room, router } = getRoomAndRouter(currentRoomId) ?? {};
+          const { room, router } = getRoomAndRouter(roomId) ?? {};
           if (!room || !router) return;
 
           const peerId = wsToPeerId.get(socket);
@@ -201,9 +208,10 @@ async function start() {
         }
 
         case "transport-produce": {
-          if(!currentRoomId) return
+          const roomId = getRoomId(socket);
+          if (!roomId) return;
           const { kind, rtpParameters, appData } = data;
-          const { room, router } = getRoomAndRouter(currentRoomId) ?? {};
+          const { room, router } = getRoomAndRouter(roomId) ?? {};
           if (!room || !router) return;
 
           const peerId = wsToPeerId.get(socket);
@@ -228,8 +236,9 @@ async function start() {
           break;
         }
         case "create-consumerTransport": {
-          if(!currentRoomId) return
-          const { room, router } = getRoomAndRouter(currentRoomId) ?? {};
+          const roomId = getRoomId(socket);
+          if (!roomId) return;
+          const { room, router } = getRoomAndRouter(roomId) ?? {};
           if (!room || !router) return;
 
           const peerId = wsToPeerId.get(socket);
@@ -259,8 +268,9 @@ async function start() {
           break;
         }
         case "consume": {
-          if(!currentRoomId) return
-          const { room, router } = getRoomAndRouter(currentRoomId) ?? {};
+          const roomId = getRoomId(socket);
+          if (!roomId) return;
+          const { room, router } = getRoomAndRouter(roomId) ?? {};
           if (!room || !router) return;
 
           const peerId = wsToPeerId.get(socket);
@@ -300,12 +310,13 @@ async function start() {
           break;
         }
         case "consumer-ready": {
-          if(!currentRoomId) return
-          const { room, router } = getRoomAndRouter(currentRoomId) ?? {};
+          const roomId = getRoomId(socket);
+          if (!roomId) return;
+          const { room, router } = getRoomAndRouter(roomId) ?? {};
           if (!room || !router) return;
 
           const peerId = wsToPeerId.get(socket);
-          if (!peerId || !currentRoomId) return;
+          if (!peerId) return;
 
           const peer = room.peers.get(peerId);
           if (!peer || !peer.consumers) return;
@@ -324,9 +335,10 @@ async function start() {
     });
 
     socket.on("close", () => {
-      if(!currentRoomId) return
+      const roomId = getRoomId(socket);
+      if (!roomId) return;
       console.log("Client disconnected");
-      cleanupPeer(socket, currentRoomId);
+      cleanupPeer(socket, roomId);
     });
   });
 }

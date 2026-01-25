@@ -1,5 +1,5 @@
 import type { Router, Worker } from "mediasoup/types";
-import { rooms, wsToPeerId, type Room } from "./index.js";
+import { peerIdToRoomId, rooms, wsToPeerId, type Room } from "./index.js";
 import { initWorker } from "./worker.js";
 import type { types as mediasoupTypes } from "mediasoup";
 import type WebSocket from "ws";
@@ -60,4 +60,12 @@ export function cleanupPeer(socket: WebSocket, roomId: string) {
       rooms.delete(roomId);
     }
   }
+}
+
+export function getRoomId(socket: WebSocket) {
+  const peerId = wsToPeerId.get(socket);
+  if (!peerId) return;
+  const roomId = peerIdToRoomId.get(peerId);
+
+  return roomId
 }
