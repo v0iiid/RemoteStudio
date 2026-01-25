@@ -1,5 +1,5 @@
 import express from "express";
-import { initRouter, initWebRtcServer } from "./worker.js";
+import { initWebRtcServer, initWorker } from "./worker.js";
 import WebSocket, { WebSocketServer } from "ws";
 import {
   type Consumer,
@@ -10,27 +10,28 @@ import {
   type Transport,
   type WebRtcTransport,
 } from "mediasoup/types";
-import crypto from "crypto";
+import crypto, { randomUUID, type UUID } from "crypto";
+import { createRoom } from "./utils.js";
 
 interface Peer {
   id: string;
   roomId: string;
   ws: WebSocket;
 
-  producerTransport: WebRtcTransport;
-  consumerTransport: WebRtcTransport;
+  producerTransport: WebRtcTransport | undefined;
+  consumerTransport: WebRtcTransport | undefined;
 
   producers: Map<string, Producer>;
   consumers: Map<string, Consumer>;
 }
 
 export interface Room {
-  id:string,
-  router:Router,
-  peers:Map<string,Peer>;
+  id: string;
+  router: Router;
+  peers: Map<string, Peer>;
 }
 
-export const rooms:Map<string,Room> = new Map();
+export const rooms: Map<string, Room> = new Map();
 
 function createRoomId() {
   const roomId = crypto.randomBytes(4).toString("hex");
@@ -38,10 +39,15 @@ function createRoomId() {
   return roomId;
 }
 
+function createPeerId(): string {
+  return `peer-${randomUUID()}`;
+}
+
 async function start() {
   const server = new WebSocketServer({ port: 8081 });
   const webRtcServer = await initWebRtcServer();
   const router = await initRouter();
+  const worker = await initWorker();
   server.on("connection", async (socket) => {
     console.log("Client connected");
     let currentRoomId = "";
@@ -54,29 +60,71 @@ async function start() {
       console.log("type->", data.type);
 
       switch (data.type) {
-        case "create-room":
+        case "create-room": {
           const newRoomId = createRoomId();
+
           socket.send(JSON.stringify({ type: "room-created", newRoomId }));
-          rooms.set(newRoomId, {
-            id:newRoomId,
-            peers:{
 
-            },
-          });
+          // await must be inside block
+          const currentRoom = await createRoom(newRoomId, worker);
+
+          const peerId = createPeerId();
+          const peer: Peer = {
+            id: peerId,
+            roomId: newRoomId,
+            ws: socket,
+            producerTransport: undefined,
+            consumerTransport: undefined,
+            producers: new Map(),
+            consumers: new Map(),
+          };
+
+          currentRoom.peers.set(peerId, peer);
+
+          // store room globally
+          rooms.set(newRoomId, currentRoom);
 
           break;
-        case "join-room":
+        }
+
+        case "join-room": {
           const { joinRoomId } = data;
-          if (!rooms.has(joinRoomId)) {
-            rooms.set(joinRoomId, {
-              peers: new Set(),
-            });
-          }
-          rooms.get(joinRoomId).peers.add(socket);
-          currentRoomId = joinRoomId;
 
-          socket.send(JSON.stringify({ type: "joined-room", joinRoomId, peerCount: rooms.get(joinRoomId).peers.size }));
+          // create room if missing
+          if (!rooms.has(joinRoomId)) {
+            const newRoom = await createRoom(joinRoomId, worker);
+            rooms.set(joinRoomId, newRoom);
+          }
+
+          const currentRoom = rooms.get(joinRoomId)!; // non-null assertion
+
+          const peerId = createPeerId();
+          const peer: Peer = {
+            id: peerId,
+            roomId: joinRoomId,
+            ws: socket,
+            producerTransport: undefined,
+            consumerTransport: undefined,
+            producers: new Map(),
+            consumers: new Map(),
+          };
+
+          currentRoom.peers.set(peerId, peer);
+
+          currentRoomId = joinRoomId; // optional: store per socket
+
+          socket.send(
+            JSON.stringify({
+              type: "joined-room",
+              joinRoomId,
+              peerId,
+              peerCount: currentRoom.peers.size,
+            }),
+          );
+
           break;
+        }
+
         case "close":
           if (!currentRoomId) return;
           const room = rooms.get(currentRoomId);

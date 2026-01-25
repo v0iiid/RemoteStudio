@@ -5,7 +5,6 @@ import type { types as mediasoupTypes } from "mediasoup";
 
 export async function createRoom(roomId:string,worker:Worker):Promise<Room> {
 
-
   const mediaCodecs: mediasoupTypes.RtpCodecCapability[] = [
     {
       kind: "audio",
