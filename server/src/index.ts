@@ -31,6 +31,8 @@ export interface Room {
   peers: Map<string, Peer>;
 }
 
+const wsToPeerId: Map<WebSocket, string> = new Map();
+
 export const rooms: Map<string, Room> = new Map();
 
 function createRoomId() {
@@ -65,9 +67,7 @@ async function start() {
 
           socket.send(JSON.stringify({ type: "room-created", newRoomId }));
 
-          // await must be inside block
           const currentRoom = await createRoom(newRoomId, worker);
-
           const peerId = createPeerId();
           const peer: Peer = {
             id: peerId,
@@ -80,23 +80,20 @@ async function start() {
           };
 
           currentRoom.peers.set(peerId, peer);
-
-          // store room globally
           rooms.set(newRoomId, currentRoom);
-
+          wsToPeerId.set(socket, peerId);
           break;
         }
 
         case "join-room": {
           const { joinRoomId } = data;
 
-          // create room if missing
           if (!rooms.has(joinRoomId)) {
             const newRoom = await createRoom(joinRoomId, worker);
             rooms.set(joinRoomId, newRoom);
           }
 
-          const currentRoom = rooms.get(joinRoomId)!; // non-null assertion
+          const currentRoom = rooms.get(joinRoomId)!;
 
           const peerId = createPeerId();
           const peer: Peer = {
@@ -108,11 +105,9 @@ async function start() {
             producers: new Map(),
             consumers: new Map(),
           };
-
           currentRoom.peers.set(peerId, peer);
-
-          currentRoomId = joinRoomId; // optional: store per socket
-
+          currentRoomId = joinRoomId;
+          wsToPeerId.set(socket, peerId);
           socket.send(
             JSON.stringify({
               type: "joined-room",
@@ -125,13 +120,27 @@ async function start() {
           break;
         }
 
-        case "close":
+        case "close": {
           if (!currentRoomId) return;
+
           const room = rooms.get(currentRoomId);
           if (!room) return;
-          room.peers.delete(socket);
-          break;
 
+          const peerId = wsToPeerId.get(socket);
+          if (peerId) {
+            const peer = room.peers.get(peerId);
+
+            if (peer?.producerTransport) peer.producerTransport.close();
+            if (peer?.consumerTransport) peer.consumerTransport.close();
+
+            peer?.producers.forEach((p) => p.close());
+            peer?.consumers.forEach((c) => c.close());
+
+            room.peers.delete(peerId);
+            wsToPeerId.delete(socket);
+          }
+          break;
+        }
         case "getRtpCapabilities":
           socket.send(
             JSON.stringify({
