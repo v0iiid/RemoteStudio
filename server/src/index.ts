@@ -24,13 +24,13 @@ interface Peer {
   consumers: Map<string, Consumer>;
 }
 
-interface Room {
+export interface Room {
   id:string,
   router:Router,
   peers:Map<string,Peer>;
 }
 
-const rooms:Map<string,Room> = new Map();
+export const rooms:Map<string,Room> = new Map();
 
 function createRoomId() {
   const roomId = crypto.randomBytes(4).toString("hex");
@@ -58,7 +58,10 @@ async function start() {
           const newRoomId = createRoomId();
           socket.send(JSON.stringify({ type: "room-created", newRoomId }));
           rooms.set(newRoomId, {
-            peers: new Set(),
+            id:newRoomId,
+            peers:{
+
+            },
           });
 
           break;
