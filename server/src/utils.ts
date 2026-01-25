@@ -62,10 +62,19 @@ export function cleanupPeer(socket: WebSocket, roomId: string) {
   }
 }
 
-export function getRoomId(socket: WebSocket) {
+
+export function getContext(socket: WebSocket) {
   const peerId = wsToPeerId.get(socket);
   if (!peerId) return;
+
   const roomId = peerIdToRoomId.get(peerId);
 
-  return roomId
+  if (!roomId) return;
+  const room = rooms.get(roomId);
+  if (!room) return;
+
+  const peer = room.peers.get(peerId);
+  const router = room.router;
+  if (!peer) return;
+  return { roomId, room, peerId, peer, router };
 }
