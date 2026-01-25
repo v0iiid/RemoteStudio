@@ -266,13 +266,20 @@ async function start() {
           );
           break;
         }
-        case "consume":
-          if (!producer || !consumerTransport) return;
+        case "consume": {
+          const { room, router } = getRoomAndRouter(currentRoomId) ?? {};
+          if (!room || !router) return;
 
+          const peerId = wsToPeerId.get(socket);
+          if (!peerId) return;
+
+          const peer = room.peers.get(peerId);
+          if (!peer || !peer.consumerTransport) return;
+          const { producerId, rtpCapabilities } = data;
           if (
             !router.canConsume({
-              producerId: producer.id,
-              rtpCapabilities: data.data.rtpCapabilities,
+              producerId: producerId,
+              rtpCapabilities: rtpCapabilities,
             })
           ) {
             console.log("the router can't consume");
@@ -280,32 +287,33 @@ async function start() {
           }
           console.log(
             "can it consumer",
-            router.canConsume({ producerId: producer.id, rtpCapabilities: data.data.rtpCapabilities }),
+            router.canConsume({ producerId: producerId, rtpCapabilities: rtpCapabilities }),
           );
-          consumer = await consumerTransport.consume({
-            producerId: producer.id,
+          const consumer = await peer.consumerTransport.consume({
+            producerId: producerId,
             rtpCapabilities: data.data.rtpCapabilities,
             paused: true,
           });
-
+          peer.consumers.set(consumer.id, consumer);
           socket.send(
             JSON.stringify({
               type: "newConsumer",
               id: consumer.id,
-              producerId: producer.id,
+              producerId: producerId,
               kind: consumer.kind,
               rtpParameters: consumer.rtpParameters,
             }),
           );
           break;
-
-        case "consumer-ready":
+        }
+        case "consumer-ready":{
           console.log("is consumer-ready");
           if (consumer) {
             await consumer.requestKeyFrame();
             await consumer.resume();
             console.log("consumer resumed on backend");
           }
+          break;}
       }
     });
 
