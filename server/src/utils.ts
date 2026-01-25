@@ -1,4 +1,4 @@
-import type { Worker } from "mediasoup/types";
+import type { Router, Worker } from "mediasoup/types";
 import { rooms, type Room } from "./index.js";
 import { initWorker } from "./worker.js";
 import type { types as mediasoupTypes } from "mediasoup";
@@ -31,3 +31,10 @@ export async function createRoom(roomId:string,worker:Worker):Promise<Room> {
 
   return room;
 }
+
+export function getRoomAndRouter(roomId:string):{room:Room,router:Router} | null{
+    const room = rooms.get(roomId);
+    if(!room) return null
+    return {room,router:room.router}
+}
+

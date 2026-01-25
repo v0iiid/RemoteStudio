@@ -48,7 +48,7 @@ function createPeerId(): string {
 async function start() {
   const server = new WebSocketServer({ port: 8081 });
   const webRtcServer = await initWebRtcServer();
-  const router = await initRouter();
+
   const worker = await initWorker();
   server.on("connection", async (socket) => {
     console.log("Client connected");
@@ -116,7 +116,6 @@ async function start() {
               peerCount: currentRoom.peers.size,
             }),
           );
-
           break;
         }
 
@@ -141,7 +140,9 @@ async function start() {
           }
           break;
         }
-        case "getRtpCapabilities":
+        case "getRtpCapabilities":{
+          const room = rooms.get(currentRoomId)
+          const router = room!.router;
           socket.send(
             JSON.stringify({
               type: "rtpCapabilities",
@@ -149,6 +150,7 @@ async function start() {
             }),
           );
           break;
+        }
         case "createTransport":
           producerTransport = await router.createWebRtcTransport({
             webRtcServer,
