@@ -26,13 +26,25 @@ export default function Home() {
 
     ws.onopen = () => {
       console.log('WebSocket connected');
-      ws.send(JSON.stringify({ type: 'getRtpCapabilities' }));
+      ws.send(JSON.stringify({ type: "create-room" }));
+
     };
 
     ws.onmessage = async (event) => {
       const data = JSON.parse(event.data)
       console.log("type->", data.type)
       switch (data.type) {
+        case "room-created":
+          ws.send(JSON.stringify({
+            type: "join-room",
+            roomId: data.roomId,
+          }));
+          break;
+        case "joined-room":
+          console.log("joined room:", data.roomId);
+          console.log("peers:", data.peerCount);
+          ws.send(JSON.stringify({ type: 'getRtpCapabilities' }));
+          break;
         case "rtpCapabilities":
           try {
             await device.load({ routerRtpCapabilities: data.rtpCapabilities })
