@@ -11,7 +11,7 @@ import {
   type WebRtcTransport,
 } from "mediasoup/types";
 import crypto, { randomUUID, type UUID } from "crypto";
-import { cleanupPeer, createRoom, getContext, getRoomAndRouter, getRoomId } from "./utils.js";
+import { cleanupPeer, createRoom, getContext, getRoomAndRouter } from "./utils.js";
 
 export interface Peer {
   id: string;
