@@ -11,7 +11,7 @@ import {
   type WebRtcTransport,
 } from "mediasoup/types";
 import crypto, { randomUUID, type UUID } from "crypto";
-import { cleanupPeer, createRoom, getContext, getRoomAndRouter, sendJson } from "./utils.js";
+import { cleanupPeer, createRoom, getRoomAndRouter, safeContext, sendJson } from "./utils.js";
 
 export interface Peer {
   id: string;
@@ -124,9 +124,8 @@ async function start() {
           break;
         }
         case "getRtpCapabilities": {
-          const ctx = getContext(socket);
-          if (!ctx) return;
-          const { roomId } = ctx;
+
+          const { roomId } =  safeContext(socket);
           if (!roomId) return;
           const data = getRoomAndRouter(roomId);
           if (!data) return;
@@ -138,9 +137,8 @@ async function start() {
           break;
         }
         case "createTransport": {
-          const ctx = getContext(socket);
-          if (!ctx) return;
-          const { peer, router } = ctx;
+
+          const { peer, router } =  safeContext(socket);
           const producerTransport = await router.createWebRtcTransport({
             webRtcServer,
             enableUdp: true,
@@ -162,9 +160,8 @@ async function start() {
           break;
         }
         case "transport-connect": {
-          const ctx = getContext(socket);
-          if (!ctx) return;
-          const { peer } = ctx;
+
+          const { peer } =  safeContext(socket);
           const { dtlsParameters } = data;
 
           if (!peer?.producerTransport) return;
@@ -176,9 +173,8 @@ async function start() {
         }
 
         case "consumer-connect": {
-          const ctx = getContext(socket);
-          if (!ctx) return;
-          const { peer } = ctx;
+
+          const { peer } =  safeContext(socket);
           const { dtlsParameters } = data;
 
           if (!peer?.consumerTransport) return;
@@ -191,9 +187,8 @@ async function start() {
         }
 
         case "transport-produce": {
-          const ctx = getContext(socket);
-          if (!ctx) return;
-          const { peer } = ctx;
+
+          const { peer } =  safeContext(socket);
           const { kind, rtpParameters, appData } = data;
 
           if (!peer?.producerTransport) return;
@@ -213,9 +208,8 @@ async function start() {
           break;
         }
         case "create-consumerTransport": {
-          const ctx = getContext(socket);
-          if (!ctx) return;
-          const { roomId, room, peerId, peer, router } = ctx;
+
+          const { peer, router } = safeContext(socket);
           const consumerTransport = await router.createWebRtcTransport({
             webRtcServer,
             enableUdp: true,
@@ -236,9 +230,8 @@ async function start() {
           break;
         }
         case "consume": {
-          const ctx = getContext(socket);
-          if (!ctx) return;
-          const { peer, router } = ctx;
+
+          const { peer, router } =  safeContext(socket);
 
           if (!peer || !peer.consumerTransport) return;
           const { producerId, rtpCapabilities } = data;
@@ -272,9 +265,8 @@ async function start() {
           break;
         }
         case "consumer-ready": {
-          const ctx = getContext(socket);
-          if (!ctx) return;
-          const { peer } = ctx;
+
+          const { peer } = safeContext(socket);
 
           const { consumerId } = data;
           const consumer = peer.consumers.get(consumerId);
@@ -290,9 +282,8 @@ async function start() {
     });
 
     socket.on("close", () => {
-      const ctx = getContext(socket);
-      if (!ctx) return;
-      const { roomId } = ctx;
+
+      const { roomId } = safeContext(socket);
       if (!roomId) return;
       console.log("Client disconnected");
       cleanupPeer(socket, roomId);
