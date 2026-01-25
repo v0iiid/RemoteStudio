@@ -150,10 +150,10 @@ async function start() {
           );
           break;
         }
-        case "createTransport":
-          const data = getRoomAndRouter(currentRoomId);
-          if (!data) return;
-          const producerTransport = await data.router.createWebRtcTransport({
+        case "createTransport": {
+          const { room, router } = getRoomAndRouter(currentRoomId) ?? {};
+          if (!room || !router) return;
+          const producerTransport = await router.createWebRtcTransport({
             webRtcServer,
             enableUdp: true,
             enableTcp: true,
@@ -163,7 +163,7 @@ async function start() {
           const peerId = wsToPeerId.get(socket);
           if (!peerId) return;
 
-          const peer = data.room.peers.get(peerId);
+          const peer = room.peers.get(peerId);
           if (!peer) return;
           peer.producerTransport = producerTransport;
           socket.send(
@@ -177,12 +177,24 @@ async function start() {
             }),
           );
           break;
-        case "transport-connect":
-          await producerTransport.connect({
+        }
+        case "transport-connect": {
+          const { room, router } = getRoomAndRouter(currentRoomId) ?? {};
+          if (!room || !router) return;
+
+          const peerId = wsToPeerId.get(socket);
+          if (!peerId) return;
+
+          const peer = room.peers.get(peerId);
+          if (!peer?.producerTransport) return;
+
+          await peer.producerTransport.connect({
             dtlsParameters: data.data.dtlsParameters,
           });
           break;
-        case "consumer-connect":
+        }
+
+        case "consumer-connect":{
           await consumerTransport.connect({
             dtlsParameters: data.data.dtlsParameters,
           });
@@ -201,7 +213,7 @@ async function start() {
             }),
           );
           console.log("producer-id:", producer.id);
-          break;
+          break;};
         case "create-consumerTransport":
           consumerTransport = await router.createWebRtcTransport({
             webRtcServer,
