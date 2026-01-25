@@ -52,7 +52,7 @@ async function start() {
   const worker = await initWorker();
   server.on("connection", async (socket) => {
     console.log("Client connected");
-    let currentRoomId = "";
+    let currentRoomId: string | null = null;
 
     socket.on("message", async (message) => {
       const data = JSON.parse(message.toString());
@@ -89,6 +89,7 @@ async function start() {
             const newRoom = await createRoom(joinRoomId, worker);
             rooms.set(joinRoomId, newRoom);
           }
+          currentRoomId = joinRoomId;
           const room = rooms.get(joinRoomId)!;
 
           const peerId = createPeerId();
@@ -121,6 +122,7 @@ async function start() {
           break;
         }
         case "getRtpCapabilities": {
+          if(!currentRoomId) return
           const data = getRoomAndRouter(currentRoomId);
           if (!data) return;
           socket.send(
@@ -132,6 +134,7 @@ async function start() {
           break;
         }
         case "createTransport": {
+          if(!currentRoomId) return;
           const { room, router } = getRoomAndRouter(currentRoomId) ?? {};
           if (!room || !router) return;
           const producerTransport = await router.createWebRtcTransport({
@@ -142,10 +145,11 @@ async function start() {
             enableSctp: true,
           });
           const peerId = wsToPeerId.get(socket);
-          if (!peerId) return;
+          if (!peerId || !currentRoomId) return;
 
           const peer = room.peers.get(peerId);
           if (!peer) return;
+
           peer.producerTransport = producerTransport;
           socket.send(
             JSON.stringify({
@@ -160,6 +164,7 @@ async function start() {
           break;
         }
         case "transport-connect": {
+          if(!currentRoomId) return;
           const { dtlsParameters } = data;
           const { room, router } = getRoomAndRouter(currentRoomId) ?? {};
           if (!room || !router) return;
@@ -177,6 +182,7 @@ async function start() {
         }
 
         case "consumer-connect": {
+          if(!currentRoomId) return;
           const { dtlsParameters } = data;
           const { room, router } = getRoomAndRouter(currentRoomId) ?? {};
           if (!room || !router) return;
@@ -195,6 +201,7 @@ async function start() {
         }
 
         case "transport-produce": {
+          if(!currentRoomId) return
           const { kind, rtpParameters, appData } = data;
           const { room, router } = getRoomAndRouter(currentRoomId) ?? {};
           if (!room || !router) return;
@@ -221,6 +228,7 @@ async function start() {
           break;
         }
         case "create-consumerTransport": {
+          if(!currentRoomId) return
           const { room, router } = getRoomAndRouter(currentRoomId) ?? {};
           if (!room || !router) return;
 
@@ -251,6 +259,7 @@ async function start() {
           break;
         }
         case "consume": {
+          if(!currentRoomId) return
           const { room, router } = getRoomAndRouter(currentRoomId) ?? {};
           if (!room || !router) return;
 
@@ -291,11 +300,12 @@ async function start() {
           break;
         }
         case "consumer-ready": {
+          if(!currentRoomId) return
           const { room, router } = getRoomAndRouter(currentRoomId) ?? {};
           if (!room || !router) return;
 
           const peerId = wsToPeerId.get(socket);
-          if (!peerId) return;
+          if (!peerId || !currentRoomId) return;
 
           const peer = room.peers.get(peerId);
           if (!peer || !peer.consumers) return;
@@ -314,6 +324,7 @@ async function start() {
     });
 
     socket.on("close", () => {
+      if(!currentRoomId) return
       console.log("Client disconnected");
       cleanupPeer(socket, currentRoomId);
     });
