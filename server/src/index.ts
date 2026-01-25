@@ -1,17 +1,36 @@
 import express from "express";
 import { initRouter, initWebRtcServer } from "./worker.js";
-import { WebSocketServer } from "ws";
+import WebSocket, { WebSocketServer } from "ws";
 import {
   type Consumer,
   type ConsumerOptions,
   type Producer,
   type ProducerOptions,
+  type Router,
   type Transport,
   type WebRtcTransport,
 } from "mediasoup/types";
 import crypto from "crypto";
 
-const rooms = new Map();
+interface Peer {
+  id: string;
+  roomId: string;
+  ws: WebSocket;
+
+  producerTransport: WebRtcTransport;
+  consumerTransport: WebRtcTransport;
+
+  producers: Map<string, Producer>;
+  consumers: Map<string, Consumer>;
+}
+
+interface Room {
+  id:string,
+  router:Router,
+  peers:Map<string,Peer>;
+}
+
+const rooms:Map<string,Room> = new Map();
 
 function createRoomId() {
   const roomId = crypto.randomBytes(4).toString("hex");
@@ -25,7 +44,7 @@ async function start() {
   const router = await initRouter();
   server.on("connection", async (socket) => {
     console.log("Client connected");
-    let currentRoomId = '';
+    let currentRoomId = "";
     let producerTransport: WebRtcTransport;
     let consumerTransport: WebRtcTransport;
     let producer: Producer;
@@ -57,13 +76,11 @@ async function start() {
           break;
         case "close":
           if (!currentRoomId) return;
-
           const room = rooms.get(currentRoomId);
           if (!room) return;
-
           room.peers.delete(socket);
-
           break;
+
         case "getRtpCapabilities":
           socket.send(
             JSON.stringify({
