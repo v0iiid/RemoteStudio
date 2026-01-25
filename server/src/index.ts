@@ -211,12 +211,22 @@ async function start() {
           break;
         }
 
-        case "transport-produce":
-          producer = await producerTransport.produce<ProducerOptions>({
+        case "transport-produce": {
+          const { room, router } = getRoomAndRouter(currentRoomId) ?? {};
+          if (!room || !router) return;
+
+          const peerId = wsToPeerId.get(socket);
+          if (!peerId) return;
+
+          const peer = room.peers.get(peerId);
+          if (!peer?.producerTransport) return;
+
+          const producer = await peer.producerTransport.produce<ProducerOptions>({
             kind: data.data.kind,
             rtpParameters: data.data.rtpParameters,
             appData: data.data.appData,
           });
+          peer.producers.set(producer.id,producer);
           socket.send(
             JSON.stringify({
               type: "produce-data",
@@ -225,6 +235,7 @@ async function start() {
           );
           console.log("producer-id:", producer.id);
           break;
+        }
         case "create-consumerTransport":
           consumerTransport = await router.createWebRtcTransport({
             webRtcServer,
