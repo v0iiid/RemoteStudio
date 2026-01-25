@@ -61,7 +61,7 @@ async function start() {
       switch (data.type) {
         case "create-room": {
           const roomId = createRoomId();
-
+          currentRoomId = roomId;
           socket.send(JSON.stringify({ type: "room-created", roomId }));
 
           const room = await createRoom(roomId, worker);
@@ -267,7 +267,6 @@ async function start() {
           break;
         }
         case "consume": {
-
           const { room, router } = getRoomAndRouter(currentRoomId) ?? {};
           if (!room || !router) return;
 
@@ -332,13 +331,23 @@ async function start() {
 
     socket.on("close", () => {
       console.log("Client disconnected");
-      const room = rooms.get(currentRoomId)
-      if(!room) return
+      const room = rooms.get(currentRoomId);
+      if (!room) return;
 
       const peerId = wsToPeerId.get(socket);
-      if(!peerId) return
+      if (peerId) {
+        const peer = room.peers.get(peerId);
 
-      room.peers.delete(peerId)
+        if (peer?.producerTransport) peer.producerTransport.close();
+        if (peer?.consumerTransport) peer.consumerTransport.close();
+
+        peer?.producers.forEach((p) => p.close());
+        peer?.consumers.forEach((c) => c.close());
+
+        room.peers.delete(peerId);
+        wsToPeerId.delete(socket);
+
+      }
     });
   });
 }
