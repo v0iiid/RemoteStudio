@@ -64,7 +64,7 @@ async function start() {
 
           socket.send(JSON.stringify({ type: "room-created", newRoomId }));
 
-          const currentRoom = await createRoom(newRoomId, worker);
+          const room = await createRoom(newRoomId, worker);
           const peerId = createPeerId();
           const peer: Peer = {
             id: peerId,
@@ -76,8 +76,8 @@ async function start() {
             consumers: new Map(),
           };
 
-          currentRoom.peers.set(peerId, peer);
-          rooms.set(newRoomId, currentRoom);
+          room.peers.set(peerId, peer);
+          rooms.set(newRoomId, room);
           wsToPeerId.set(socket, peerId);
           break;
         }
@@ -89,7 +89,7 @@ async function start() {
             const newRoom = await createRoom(joinRoomId, worker);
             rooms.set(joinRoomId, newRoom);
           }
-          const currentRoom = rooms.get(joinRoomId)!;
+          const room = rooms.get(joinRoomId)!;
 
           const peerId = createPeerId();
           const peer: Peer = {
@@ -101,7 +101,7 @@ async function start() {
             producers: new Map(),
             consumers: new Map(),
           };
-          currentRoom.peers.set(peerId, peer);
+          room.peers.set(peerId, peer);
           currentRoomId = joinRoomId;
           wsToPeerId.set(socket, peerId);
           socket.send(
@@ -109,7 +109,7 @@ async function start() {
               type: "joined-room",
               joinRoomId,
               peerId,
-              peerCount: currentRoom.peers.size,
+              peerCount: room.peers.size,
             }),
           );
           break;
