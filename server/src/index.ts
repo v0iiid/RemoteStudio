@@ -176,6 +176,7 @@ async function start() {
           break;
         }
         case "transport-connect": {
+          const { dtlsParameters } = data;
           const { room, router } = getRoomAndRouter(currentRoomId) ?? {};
           if (!room || !router) return;
 
@@ -186,12 +187,13 @@ async function start() {
           if (!peer?.producerTransport) return;
 
           await peer.producerTransport.connect({
-            dtlsParameters: data.data.dtlsParameters,
+            dtlsParameters: dtlsParameters,
           });
           break;
         }
 
         case "consumer-connect": {
+          const { dtlsParameters } = data;
           const { room, router } = getRoomAndRouter(currentRoomId) ?? {};
           if (!room || !router) return;
 
@@ -202,13 +204,14 @@ async function start() {
           if (!peer?.consumerTransport) return;
 
           await peer.consumerTransport.connect({
-            dtlsParameters: data.data.dtlsParameters,
+            dtlsParameters: dtlsParameters,
           });
           socket.send(JSON.stringify({ type: "consumer-connected" }));
           break;
         }
 
         case "transport-produce": {
+          const { kind, rtpParameters, appData } = data;
           const { room, router } = getRoomAndRouter(currentRoomId) ?? {};
           if (!room || !router) return;
 
@@ -219,9 +222,9 @@ async function start() {
           if (!peer?.producerTransport) return;
 
           const producer = await peer.producerTransport.produce<ProducerOptions>({
-            kind: data.data.kind,
-            rtpParameters: data.data.rtpParameters,
-            appData: data.data.appData,
+            kind: kind,
+            rtpParameters: rtpParameters,
+            appData: appData,
           });
           peer.producers.set(producer.id, producer);
           socket.send(
@@ -264,6 +267,7 @@ async function start() {
           break;
         }
         case "consume": {
+
           const { room, router } = getRoomAndRouter(currentRoomId) ?? {};
           if (!room || !router) return;
 
@@ -288,7 +292,7 @@ async function start() {
           );
           const consumer = await peer.consumerTransport.consume({
             producerId: producerId,
-            rtpCapabilities: data.data.rtpCapabilities,
+            rtpCapabilities: rtpCapabilities,
             paused: true,
           });
           peer.consumers.set(consumer.id, consumer);
@@ -303,26 +307,26 @@ async function start() {
           );
           break;
         }
-          case "consumer-ready": {
-            const { room, router } = getRoomAndRouter(currentRoomId) ?? {};
-            if (!room || !router) return;
+        case "consumer-ready": {
+          const { room, router } = getRoomAndRouter(currentRoomId) ?? {};
+          if (!room || !router) return;
 
-            const peerId = wsToPeerId.get(socket);
-            if (!peerId) return;
+          const peerId = wsToPeerId.get(socket);
+          if (!peerId) return;
 
-            const peer = room.peers.get(peerId);
-            if(!peer || !peer.consumers) return
+          const peer = room.peers.get(peerId);
+          if (!peer || !peer.consumers) return;
 
-            const { consumerId } = data;
-            const consumer = peer.consumers.get(consumerId)
+          const { consumerId } = data;
+          const consumer = peer.consumers.get(consumerId);
 
-            if (consumer) {
-              await consumer.requestKeyFrame();
-              await consumer.resume();
-              console.log("consumer resumed on backend");
-            }
-            break;
+          if (consumer) {
+            await consumer.requestKeyFrame();
+            await consumer.resume();
+            console.log("consumer resumed on backend");
           }
+          break;
+        }
       }
     });
 
@@ -330,7 +334,6 @@ async function start() {
       console.log("Client disconnected");
     });
   });
-
 }
 
 start();
