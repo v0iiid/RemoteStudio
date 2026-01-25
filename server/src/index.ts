@@ -11,7 +11,7 @@ import {
   type WebRtcTransport,
 } from "mediasoup/types";
 import crypto, { randomUUID, type UUID } from "crypto";
-import { createRoom, getRoomAndRouter } from "./utils.js";
+import { cleanupPeer, createRoom, getRoomAndRouter } from "./utils.js";
 
 interface Peer {
   id: string;
@@ -31,7 +31,7 @@ export interface Room {
   peers: Map<string, Peer>;
 }
 
-const wsToPeerId: Map<WebSocket, string> = new Map();
+export const wsToPeerId: Map<WebSocket, string> = new Map();
 
 export const rooms: Map<string, Room> = new Map();
 
@@ -117,23 +117,7 @@ async function start() {
 
         case "close": {
           if (!currentRoomId) return;
-
-          const room = rooms.get(currentRoomId);
-          if (!room) return;
-
-          const peerId = wsToPeerId.get(socket);
-          if (peerId) {
-            const peer = room.peers.get(peerId);
-
-            if (peer?.producerTransport) peer.producerTransport.close();
-            if (peer?.consumerTransport) peer.consumerTransport.close();
-
-            peer?.producers.forEach((p) => p.close());
-            peer?.consumers.forEach((c) => c.close());
-
-            room.peers.delete(peerId);
-            wsToPeerId.delete(socket);
-          }
+          cleanupPeer(socket, currentRoomId);
           break;
         }
         case "getRtpCapabilities": {
@@ -318,12 +302,12 @@ async function start() {
 
           const { consumerId } = data;
           const consumer = peer.consumers.get(consumerId);
+          if (!consumer) return;
 
-          if (consumer) {
-            await consumer.requestKeyFrame();
-            await consumer.resume();
-            console.log("consumer resumed on backend");
-          }
+          await consumer.requestKeyFrame();
+          await consumer.resume();
+          console.log("consumer resumed on backend");
+
           break;
         }
       }
@@ -331,23 +315,7 @@ async function start() {
 
     socket.on("close", () => {
       console.log("Client disconnected");
-      const room = rooms.get(currentRoomId);
-      if (!room) return;
-
-      const peerId = wsToPeerId.get(socket);
-      if (peerId) {
-        const peer = room.peers.get(peerId);
-
-        if (peer?.producerTransport) peer.producerTransport.close();
-        if (peer?.consumerTransport) peer.consumerTransport.close();
-
-        peer?.producers.forEach((p) => p.close());
-        peer?.consumers.forEach((c) => c.close());
-
-        room.peers.delete(peerId);
-        wsToPeerId.delete(socket);
-
-      }
+      cleanupPeer(socket, currentRoomId);
     });
   });
 }
