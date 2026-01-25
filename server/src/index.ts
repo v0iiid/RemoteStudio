@@ -125,7 +125,9 @@ async function start() {
           break;
         }
         case "getRtpCapabilities": {
-          const roomId = getRoomId(socket);
+          const ctx = getContext(socket);
+          if (!ctx) return;
+          const { roomId } = ctx;
           if (!roomId) return;
           const data = getRoomAndRouter(roomId);
           if (!data) return;
@@ -294,7 +296,9 @@ async function start() {
     });
 
     socket.on("close", () => {
-      const roomId = getRoomId(socket);
+      const ctx = getContext(socket);
+          if (!ctx) return;
+          const { roomId } = ctx;
       if (!roomId) return;
       console.log("Client disconnected");
       cleanupPeer(socket, roomId);
