@@ -60,15 +60,15 @@ async function start() {
 
       switch (data.type) {
         case "create-room": {
-          const newRoomId = createRoomId();
+          const roomId = createRoomId();
 
-          socket.send(JSON.stringify({ type: "room-created", newRoomId }));
+          socket.send(JSON.stringify({ type: "room-created", roomId }));
 
-          const room = await createRoom(newRoomId, worker);
+          const room = await createRoom(roomId, worker);
           const peerId = createPeerId();
           const peer: Peer = {
             id: peerId,
-            roomId: newRoomId,
+            roomId: roomId,
             ws: socket,
             producerTransport: undefined,
             consumerTransport: undefined,
@@ -77,7 +77,7 @@ async function start() {
           };
 
           room.peers.set(peerId, peer);
-          rooms.set(newRoomId, room);
+          rooms.set(roomId, room);
           wsToPeerId.set(socket, peerId);
           break;
         }
@@ -244,7 +244,7 @@ async function start() {
           if (!peerId) return;
 
           const peer = room.peers.get(peerId);
-          if (!peer?.consumerTransport) return;
+          if (!peer) return;
 
           const consumerTransport = await router.createWebRtcTransport({
             webRtcServer,
@@ -332,6 +332,13 @@ async function start() {
 
     socket.on("close", () => {
       console.log("Client disconnected");
+      const room = rooms.get(currentRoomId)
+      if(!room) return
+
+      const peerId = wsToPeerId.get(socket);
+      if(!peerId) return
+
+      room.peers.delete(peerId)
     });
   });
 }
