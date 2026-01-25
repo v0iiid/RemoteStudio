@@ -53,10 +53,7 @@ async function start() {
   server.on("connection", async (socket) => {
     console.log("Client connected");
     let currentRoomId = "";
-    let producerTransport: WebRtcTransport;
-    let consumerTransport: WebRtcTransport;
-    let producer: Producer;
-    let consumer: Consumer;
+
     socket.on("message", async (message) => {
       const data = JSON.parse(message.toString());
       console.log("type->", data.type);
