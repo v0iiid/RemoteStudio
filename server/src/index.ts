@@ -139,25 +139,33 @@ async function start() {
           }
           break;
         }
-            case "getRtpCapabilities":{
-              const data = getRoomAndRouter(currentRoomId)
-              if(!data) return
-              socket.send(
-                JSON.stringify({
-                  type: "rtpCapabilities",
-                  rtpCapabilities: data.router.rtpCapabilities,
-                }),
-              );
-              break;
-            }
+        case "getRtpCapabilities": {
+          const data = getRoomAndRouter(currentRoomId);
+          if (!data) return;
+          socket.send(
+            JSON.stringify({
+              type: "rtpCapabilities",
+              rtpCapabilities: data.router.rtpCapabilities,
+            }),
+          );
+          break;
+        }
         case "createTransport":
-          producerTransport = await router.createWebRtcTransport({
+          const data = getRoomAndRouter(currentRoomId);
+          if (!data) return;
+          const producerTransport = await data.router.createWebRtcTransport({
             webRtcServer,
             enableUdp: true,
             enableTcp: true,
             preferUdp: true,
             enableSctp: true,
           });
+          const peerId = wsToPeerId.get(socket);
+          if (!peerId) return;
+
+          const peer = data.room.peers.get(peerId);
+          if (!peer) return;
+          peer.producerTransport = producerTransport;
           socket.send(
             JSON.stringify({
               type: "transportCreated",
