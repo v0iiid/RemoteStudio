@@ -11,7 +11,7 @@ import {
   type WebRtcTransport,
 } from "mediasoup/types";
 import crypto, { randomUUID, type UUID } from "crypto";
-import { createRoom } from "./utils.js";
+import { createRoom, getRoomAndRouter } from "./utils.js";
 
 interface Peer {
   id: string;
@@ -92,7 +92,6 @@ async function start() {
             const newRoom = await createRoom(joinRoomId, worker);
             rooms.set(joinRoomId, newRoom);
           }
-
           const currentRoom = rooms.get(joinRoomId)!;
 
           const peerId = createPeerId();
@@ -140,17 +139,17 @@ async function start() {
           }
           break;
         }
-        case "getRtpCapabilities":{
-          const room = rooms.get(currentRoomId)
-          const router = room!.router;
-          socket.send(
-            JSON.stringify({
-              type: "rtpCapabilities",
-              rtpCapabilities: router.rtpCapabilities,
-            }),
-          );
-          break;
-        }
+            case "getRtpCapabilities":{
+              const data = getRoomAndRouter(currentRoomId)
+              if(!data) return
+              socket.send(
+                JSON.stringify({
+                  type: "rtpCapabilities",
+                  rtpCapabilities: data.router.rtpCapabilities,
+                }),
+              );
+              break;
+            }
         case "createTransport":
           producerTransport = await router.createWebRtcTransport({
             webRtcServer,
