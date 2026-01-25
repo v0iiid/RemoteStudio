@@ -306,14 +306,26 @@ async function start() {
           );
           break;
         }
-        case "consumer-ready":{
-          console.log("is consumer-ready");
-          if (consumer) {
-            await consumer.requestKeyFrame();
-            await consumer.resume();
-            console.log("consumer resumed on backend");
+          case "consumer-ready": {
+            const { room, router } = getRoomAndRouter(currentRoomId) ?? {};
+            if (!room || !router) return;
+
+            const peerId = wsToPeerId.get(socket);
+            if (!peerId) return;
+
+            const peer = room.peers.get(peerId);
+            if(!peer || !peer.consumers) return
+
+            const { consumerId } = data;
+            const consumer = peer.consumers.get(consumerId)
+
+            if (consumer) {
+              await consumer.requestKeyFrame();
+              await consumer.resume();
+              console.log("consumer resumed on backend");
+            }
+            break;
           }
-          break;}
       }
     });
 
@@ -322,7 +334,6 @@ async function start() {
     });
   });
 
-  console.log(router.id);
 }
 
 start();
