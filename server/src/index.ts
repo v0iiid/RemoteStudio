@@ -226,7 +226,7 @@ async function start() {
             rtpParameters: data.data.rtpParameters,
             appData: data.data.appData,
           });
-          peer.producers.set(producer.id,producer);
+          peer.producers.set(producer.id, producer);
           socket.send(
             JSON.stringify({
               type: "produce-data",
@@ -236,14 +236,24 @@ async function start() {
           console.log("producer-id:", producer.id);
           break;
         }
-        case "create-consumerTransport":
-          consumerTransport = await router.createWebRtcTransport({
+        case "create-consumerTransport": {
+          const { room, router } = getRoomAndRouter(currentRoomId) ?? {};
+          if (!room || !router) return;
+
+          const peerId = wsToPeerId.get(socket);
+          if (!peerId) return;
+
+          const peer = room.peers.get(peerId);
+          if (!peer?.consumerTransport) return;
+
+          const consumerTransport = await router.createWebRtcTransport({
             webRtcServer,
             enableUdp: true,
             enableTcp: true,
             preferUdp: true,
             enableSctp: true,
           });
+          peer.consumerTransport = consumerTransport;
           socket.send(
             JSON.stringify({
               type: "consumerTransportCreated",
@@ -255,7 +265,7 @@ async function start() {
             }),
           );
           break;
-
+        }
         case "consume":
           if (!producer || !consumerTransport) return;
 
