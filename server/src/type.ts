@@ -7,6 +7,7 @@ export interface BaseMessage<Type extends string, Payload = {}> {
 
 
 export interface CreateRoomMessage extends BaseMessage<'create-room'> {}
+export interface CloseRoomMessage extends BaseMessage<'close-room'>{}
 export interface JoinRoomMessage extends BaseMessage<'join-room', { joinRoomId: string }> {}
 export interface GetRtpCapabilitiesMessage extends BaseMessage<'getRtpCapabilities'> {}
 
@@ -39,6 +40,7 @@ export interface ConsumerReadyMessage extends BaseMessage<'consumer-ready', { co
 export type ClientToServerMessage =
   | CreateRoomMessage
   | JoinRoomMessage
+  | CloseRoomMessage
   | GetRtpCapabilitiesMessage
   | CreateTransportMessage
   | TransportConnectMessage

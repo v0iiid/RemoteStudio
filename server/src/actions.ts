@@ -3,7 +3,7 @@ import { createPeerId, createRoomId, peerIdToRoomId, rooms, wsToPeerId, type Pee
 import { cleanupPeer, createRoom, getRoomAndRouter, safeContext, sendJson } from "./utils.js";
 import type WebSocket from "ws";
 
-export async function createNewRoom(data: any, worker: Worker, socket: WebSocket) {
+export async function createNewRoom( worker: Worker, socket: WebSocket) {
   const roomId = createRoomId();
   sendJson(socket, { type: "room-created", roomId });
 
@@ -24,9 +24,9 @@ export async function createNewRoom(data: any, worker: Worker, socket: WebSocket
   wsToPeerId.set(socket, peerId);
 }
 
-export async function joinRoom(data: any, socket: WebSocket) {
-  console.log("data",data)
-  const { joinRoomId } = data;
+export async function joinRoom(payload: any, socket: WebSocket) {
+  console.log("payload",payload)
+  const { joinRoomId } = payload;
 
   if (!rooms.has(joinRoomId)) {
     sendJson(socket, {
@@ -62,7 +62,7 @@ export async function joinRoom(data: any, socket: WebSocket) {
   });
 }
 
-export function close(data: any, worker: Worker, socket: WebSocket) {
+export function close( socket: WebSocket) {
   const peerId = wsToPeerId.get(socket);
   if (!peerId) return;
   const roomId = peerIdToRoomId.get(peerId);
@@ -107,10 +107,10 @@ export async function createProducerTransport(webRtcServer: WebRtcServer, socket
     sctpParameters: producerTransport.sctpParameters,
   });
 }
-export async function producerTransportConnect(data: any, socket: WebSocket) {
+export async function producerTransportConnect(payload: any, socket: WebSocket) {
   const { peer } = safeContext(socket);
-  const { dtlsParameters } = data;
-  console.log("dtlsparmas",data)
+  const { dtlsParameters } = payload;
+  console.log("dtlsparmas",payload)
   if (!peer?.producerTransport) return;
 
   await peer.producerTransport.connect({
@@ -118,9 +118,9 @@ export async function producerTransportConnect(data: any, socket: WebSocket) {
   });
 }
 
-export async function consumerConnect(data: any, socket: WebSocket) {
+export async function consumerConnect(payload: any, socket: WebSocket) {
   const { peer } = safeContext(socket);
-  const { dtlsParameters } = data;
+  const { dtlsParameters } = payload;
 
   if (!peer?.consumerTransport) return;
 
@@ -130,10 +130,10 @@ export async function consumerConnect(data: any, socket: WebSocket) {
   sendJson(socket, { type: "consumer-connected" });
 }
 
-export async function transportProduce(data: any, socket: WebSocket) {
+export async function transportProduce(payload: any, socket: WebSocket) {
   const { peer, room, router } = safeContext(socket);
 
-  const { kind, rtpParameters, appData } = data;
+  const { kind, rtpParameters, appData } = payload;
 
   if (!peer?.producerTransport) return;
 
@@ -190,12 +190,12 @@ export async function createConsumerTransport(webRtcServer: WebRtcServer, socket
   });
 }
 
-export async function consume(data: any, socket: WebSocket) {
+export async function consume(payload: any, socket: WebSocket) {
   const { peer, router } = safeContext(socket);
 
   if (!peer || !peer.consumerTransport) return;
-  const { producerId, rtpCapabilities } = data;
-  console.log("can't con",data)
+  const { producerId, rtpCapabilities } = payload;
+  console.log("can't con",payload)
   if (
     !router.canConsume({
       producerId: producerId,
@@ -220,10 +220,10 @@ export async function consume(data: any, socket: WebSocket) {
     rtpParameters: consumer.rtpParameters,
   });
 }
-export async function consumerReady(data: any, socket: WebSocket) {
+export async function consumerReady(payload: any, socket: WebSocket) {
   const { peer } = safeContext(socket);
 
-  const { consumerId } = data;
+  const { consumerId } = payload;
   const consumer = peer.consumers.get(consumerId);
   if (!consumer) return;
 

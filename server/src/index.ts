@@ -26,6 +26,7 @@ import {
   producerTransportConnect,
   transportProduce,
 } from "./actions.js";
+import type { ClientToServerMessage } from "./type.js";
 
 export interface Peer {
   id: string;
@@ -72,22 +73,22 @@ async function start() {
     console.log("Client connected");
 
     socket.on("message", async (message) => {
-      const {type,data} = JSON.parse(message.toString());
-      console.log("type->", type);
+      const parsed:ClientToServerMessage = JSON.parse(message.toString());
+      console.log("type->", parsed.type);
 
-      switch (type) {
+      switch (parsed.type) {
         case "create-room": {
-          createNewRoom(data, worker, socket);
+          createNewRoom( worker, socket);
           break;
         }
 
         case "join-room": {
-          joinRoom(data, socket);
+          joinRoom(parsed.payload, socket);
           break;
         }
 
-        case "close": {
-          close(data, worker, socket);
+        case 'close-room': {
+          close(socket);
 
           break;
         }
@@ -101,17 +102,17 @@ async function start() {
           break;
         }
         case "transport-connect": {
-          producerTransportConnect(data, socket);
+          producerTransportConnect(parsed.payload, socket);
           break;
         }
 
         case "consumer-connect": {
-          consumerConnect(data, socket);
+          consumerConnect(parsed.payload, socket);
           break;
         }
 
         case "transport-produce": {
-          transportProduce(data, socket);
+          transportProduce(parsed.payload, socket);
           break;
         }
         case "create-consumerTransport": {
@@ -119,11 +120,11 @@ async function start() {
           break;
         }
         case "consume": {
-          consume(data, socket);
+          consume(parsed.payload, socket);
           break;
         }
         case "consumer-ready": {
-          consumerReady(data, socket);
+          consumerReady(parsed.payload, socket);
           break;
         }
       }
