@@ -67,21 +67,22 @@ async function start() {
   webRtcServer = await initWebRtcServer();
 
   const worker = await initWorker();
+  console.log("ran tim1")
   server.on("connection", async (socket) => {
     console.log("Client connected");
 
     socket.on("message", async (message) => {
-      const data = JSON.parse(message.toString());
-      console.log("type->", data.type);
+      const {type,data} = JSON.parse(message.toString());
+      console.log("type->", type);
 
-      switch (data.type) {
+      switch (type) {
         case "create-room": {
           createNewRoom(data, worker, socket);
           break;
         }
 
         case "join-room": {
-          joinRoom(data, worker, socket);
+          joinRoom(data, socket);
           break;
         }
 

@@ -3,36 +3,6 @@ import { createPeerId, createRoomId, peerIdToRoomId, rooms, wsToPeerId, type Pee
 import { cleanupPeer, createRoom, getRoomAndRouter, safeContext, sendJson } from "./utils.js";
 import type WebSocket from "ws";
 
-export async function joinRoom(data: any, worker: Worker, socket: WebSocket) {
-  const { joinRoomId } = data;
-
-  if (!rooms.has(joinRoomId)) {
-    const newRoom = await createRoom(joinRoomId, worker);
-    rooms.set(joinRoomId, newRoom);
-  }
-  const room = rooms.get(joinRoomId)!;
-
-  const peerId = createPeerId();
-  const peer: Peer = {
-    id: peerId,
-    roomId: joinRoomId,
-    ws: socket,
-    producerTransport: undefined,
-    consumerTransport: undefined,
-    producers: new Map(),
-    consumers: new Map(),
-  };
-  room.peers.set(peerId, peer);
-  peerIdToRoomId.set(peerId, room.id);
-  wsToPeerId.set(socket, peerId);
-  sendJson(socket, {
-    type: "joined-room",
-    joinRoomId,
-    peerId,
-    peerCount: room.peers.size,
-  });
-}
-
 export async function createNewRoom(data: any, worker: Worker, socket: WebSocket) {
   const roomId = createRoomId();
   sendJson(socket, { type: "room-created", roomId });
@@ -52,6 +22,44 @@ export async function createNewRoom(data: any, worker: Worker, socket: WebSocket
   room.peers.set(peerId, peer);
   rooms.set(roomId, room);
   wsToPeerId.set(socket, peerId);
+}
+
+export async function joinRoom(data: any, socket: WebSocket) {
+  console.log("data",data)
+  const { joinRoomId } = data;
+
+  if (!rooms.has(joinRoomId)) {
+    sendJson(socket, {
+      type: "error",
+      reason: "ROOM_NOT_FOUND",
+    });
+    return;
+  }
+
+  const room = rooms.get(joinRoomId)!;
+
+  const peerId = createPeerId();
+  const peer: Peer = {
+    id: peerId,
+    roomId: joinRoomId,
+    ws: socket,
+    producerTransport: undefined,
+    consumerTransport: undefined,
+    producers: new Map(),
+    consumers: new Map(),
+  };
+  room.peers.set(peerId, peer);
+  peerIdToRoomId.set(peerId, room.id);
+  wsToPeerId.set(socket, peerId);
+
+  const existingPeerIds = [...room.peers.keys()].filter((id) => id !== peerId);
+
+  sendJson(socket, {
+    type: "joined-room",
+    joinRoomId,
+    peerId,
+    existingPeerIds,
+  });
 }
 
 export function close(data: any, worker: Worker, socket: WebSocket) {
@@ -78,7 +86,9 @@ export function getRtpCapabilities(socket: WebSocket) {
 }
 
 export async function createProducerTransport(webRtcServer: WebRtcServer, socket: WebSocket) {
+  console.log("webrtcserver",webRtcServer)
   const { peer, router } = safeContext(socket);
+
   const producerTransport = await router.createWebRtcTransport({
     webRtcServer,
     enableUdp: true,
@@ -100,7 +110,7 @@ export async function createProducerTransport(webRtcServer: WebRtcServer, socket
 export async function producerTransportConnect(data: any, socket: WebSocket) {
   const { peer } = safeContext(socket);
   const { dtlsParameters } = data;
-
+  console.log("dtlsparmas",data)
   if (!peer?.producerTransport) return;
 
   await peer.producerTransport.connect({

@@ -1,6 +1,5 @@
 import type { Router, Worker } from "mediasoup/types";
 import { peerIdToRoomId, rooms, wsToPeerId, type Room } from "./index.js";
-import { initWorker } from "./worker.js";
 import type { types as mediasoupTypes } from "mediasoup";
 import type WebSocket from "ws";
 
