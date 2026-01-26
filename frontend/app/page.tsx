@@ -189,16 +189,7 @@ export default function Home() {
               });
             }
 
-            const stream = new MediaStream([track]);
 
-            const video = remoteVideoRef.current.get(data.producerId)
-            if (!video) {
-              console.warn("Video element for producer not found:", data.producerId);
-              return;
-            };
-            video.srcObject = stream;
-            video.muted = true;
-            await video.play();
 
             console.log("Remote video playing");
           })();
@@ -212,13 +203,15 @@ export default function Home() {
 
     return () => {
       ws.close();
-      producerRef.current?.close();
+      producerRef.current.forEach(p => p.close());
       consumerRef.current.forEach(c => c.close());
       producerTransportRef.current?.close();
       consumerTransportRef.current?.close();
       producerTransportRef.current?.close()
+      remoteVideoRef.current.clear();
       localVideoRef.current?.pause()
-
+      ws.onmessage = null;
+      ws.onerror = null;
       console.log('WebSocket closed')
     }
   }, [])
