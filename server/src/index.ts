@@ -83,6 +83,7 @@ async function start() {
         }
 
         case "join-room": {
+          console.log("join room",parsed)
           joinRoom(parsed.payload, socket);
           break;
         }

@@ -3,9 +3,9 @@ import { createPeerId, createRoomId, peerIdToRoomId, rooms, wsToPeerId, type Pee
 import { cleanupPeer, createRoom, getRoomAndRouter, safeContext, sendJson } from "./utils.js";
 import type WebSocket from "ws";
 
-export async function createNewRoom( worker: Worker, socket: WebSocket) {
+export async function createNewRoom(worker: Worker, socket: WebSocket) {
   const roomId = createRoomId();
-  sendJson(socket, { type: "room-created", roomId });
+  sendJson(socket, { type: "room-created", payload: { roomId } });
 
   const room = await createRoom(roomId, worker);
   const peerId = createPeerId();
@@ -25,7 +25,7 @@ export async function createNewRoom( worker: Worker, socket: WebSocket) {
 }
 
 export async function joinRoom(payload: any, socket: WebSocket) {
-  console.log("payload",payload)
+  console.log("payload", payload);
   const { joinRoomId } = payload;
 
   if (!rooms.has(joinRoomId)) {
@@ -56,13 +56,11 @@ export async function joinRoom(payload: any, socket: WebSocket) {
 
   sendJson(socket, {
     type: "joined-room",
-    joinRoomId,
-    peerId,
-    existingPeerIds,
+    payload: { joinRoomId, peerId, existingPeerIds },
   });
 }
 
-export function close( socket: WebSocket) {
+export function close(socket: WebSocket) {
   const peerId = wsToPeerId.get(socket);
   if (!peerId) return;
   const roomId = peerIdToRoomId.get(peerId);
@@ -78,7 +76,7 @@ export function getRtpCapabilities(socket: WebSocket) {
   if (!data) return;
   sendJson(socket, {
     type: "rtpCapabilities",
-    rtpCapabilities: data.router.rtpCapabilities,
+    payload: { rtpCapabilities: data.router.rtpCapabilities },
   });
   if (data.router.rtpCapabilities) {
     peer.rtpCapabilities = data.router.rtpCapabilities;
@@ -86,7 +84,7 @@ export function getRtpCapabilities(socket: WebSocket) {
 }
 
 export async function createProducerTransport(webRtcServer: WebRtcServer, socket: WebSocket) {
-  console.log("webrtcserver",webRtcServer)
+  console.log("webrtcserver", webRtcServer);
   const { peer, router } = safeContext(socket);
 
   const producerTransport = await router.createWebRtcTransport({
@@ -100,17 +98,19 @@ export async function createProducerTransport(webRtcServer: WebRtcServer, socket
   peer.producerTransport = producerTransport;
   sendJson(socket, {
     type: "transportCreated",
-    id: producerTransport.id,
-    iceParameters: producerTransport.iceParameters,
-    iceCandidates: producerTransport.iceCandidates,
-    dtlsParameters: producerTransport.dtlsParameters,
-    sctpParameters: producerTransport.sctpParameters,
+    payload: {
+      id: producerTransport.id,
+      iceParameters: producerTransport.iceParameters,
+      iceCandidates: producerTransport.iceCandidates,
+      dtlsParameters: producerTransport.dtlsParameters,
+      sctpParameters: producerTransport.sctpParameters,
+    },
   });
 }
 export async function producerTransportConnect(payload: any, socket: WebSocket) {
   const { peer } = safeContext(socket);
   const { dtlsParameters } = payload;
-  console.log("dtlsparmas",payload)
+  console.log("dtlsparmas", payload);
   if (!peer?.producerTransport) return;
 
   await peer.producerTransport.connect({
@@ -145,7 +145,7 @@ export async function transportProduce(payload: any, socket: WebSocket) {
   peer.producers.set(producer.id, producer);
   sendJson(socket, {
     type: "produce-data",
-    id: producer.id,
+    payload: { id: producer.id },
   });
 
   console.log("producer-id:", producer.id);
@@ -163,10 +163,7 @@ export async function transportProduce(payload: any, socket: WebSocket) {
     });
     sendJson(otherPeer.ws, {
       type: "newConsumer",
-      id: consumer.id,
-      producerId: producer.id,
-      kind: consumer.kind,
-      rtpParameters: consumer.rtpParameters,
+      payload: { id: consumer.id, producerId: producer.id, kind: consumer.kind, rtpParameters: consumer.rtpParameters },
     });
   }
 }
@@ -182,43 +179,49 @@ export async function createConsumerTransport(webRtcServer: WebRtcServer, socket
   peer.consumerTransport = consumerTransport;
   sendJson(socket, {
     type: "consumerTransportCreated",
-    id: consumerTransport.id,
-    iceParameters: consumerTransport.iceParameters,
-    iceCandidates: consumerTransport.iceCandidates,
-    dtlsParameters: consumerTransport.dtlsParameters,
-    sctpParameters: consumerTransport.sctpParameters,
+    payload: {
+      id: consumerTransport.id,
+      iceParameters: consumerTransport.iceParameters,
+      iceCandidates: consumerTransport.iceCandidates,
+      dtlsParameters: consumerTransport.dtlsParameters,
+      sctpParameters: consumerTransport.sctpParameters,
+    },
   });
 }
 
 export async function consume(payload: any, socket: WebSocket) {
-  const { peer, router } = safeContext(socket);
+  const { peer, router, room } = safeContext(socket);
 
   if (!peer || !peer.consumerTransport) return;
-  const { producerId, rtpCapabilities } = payload;
-  console.log("can't con",payload)
-  if (
-    !router.canConsume({
-      producerId: producerId,
-      rtpCapabilities: rtpCapabilities,
-    })
-  ) {
-    console.log("the router can't consume");
-    return;
+  const { rtpCapabilities } = payload;
+
+  for (const [peerIds, peers] of room.peers) {
+    for (const producer of peers.producers.values()) {
+      if (
+        !router.canConsume({
+          producerId: producer.id,
+          rtpCapabilities: rtpCapabilities,
+        })
+      ) {
+        console.log("the router can't consume");
+        continue;
+      }
+      console.log("can it consumer", router.canConsume({ producerId: producer.id, rtpCapabilities: rtpCapabilities }));
+      const consumer = await peer.consumerTransport.consume({
+        producerId: producer.id,
+        rtpCapabilities: rtpCapabilities,
+        paused: true,
+      });
+      peer.consumers.set(consumer.id, consumer);
+      sendJson(socket, {
+        type: "newConsumer",
+       payload:{ id: consumer.id,
+        producerId: producer.id,
+        kind: consumer.kind,
+        rtpParameters: consumer.rtpParameters,}
+      });
+    }
   }
-  console.log("can it consumer", router.canConsume({ producerId: producerId, rtpCapabilities: rtpCapabilities }));
-  const consumer = await peer.consumerTransport.consume({
-    producerId: producerId,
-    rtpCapabilities: rtpCapabilities,
-    paused: true,
-  });
-  peer.consumers.set(consumer.id, consumer);
-  sendJson(socket, {
-    type: "newConsumer",
-    id: consumer.id,
-    producerId: producerId,
-    kind: consumer.kind,
-    rtpParameters: consumer.rtpParameters,
-  });
 }
 export async function consumerReady(payload: any, socket: WebSocket) {
   const { peer } = safeContext(socket);
