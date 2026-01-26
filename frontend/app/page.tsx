@@ -1,4 +1,5 @@
 "use client"
+import { ServerToClientMessage } from '@/app/types/ws-types';
 import * as mediasoupClient from 'mediasoup-client';
 import { Consumer, Producer, Transport, TransportOptions } from 'mediasoup-client/types';
 import { useEffect, useRef, useState } from 'react';
@@ -29,14 +30,14 @@ export default function Home() {
       ws.send(JSON.stringify({ type: "create-room" }));
     };
 
-    ws.onmessage = async (event) => {
-      const data = JSON.parse(event.data)
-      console.log("type->", data.type)
-      switch (data.type) {
+    ws.onmessage = async (message) => {
+      const parsed:ServerToClientMessage = JSON.parse(message.toString())
+      console.log("type->", parsed.type)
+      switch (parsed.type) {
         case "room-created":
           ws.send(JSON.stringify({
             type: "join-room",
-            data:{joinRoomId:data.roomId} ,
+            data:{joinRoomId:parsed.payload.roomId} ,
           }));
           ws.send(JSON.stringify({ type: 'getRtpCapabilities' }));
           break;
@@ -47,7 +48,7 @@ export default function Home() {
 
         case "rtpCapabilities":
           try {
-            await device.load({ routerRtpCapabilities: data.rtpCapabilities })
+            await device.load({ routerRtpCapabilities: parsed.payload.rtpCapabilities })
             setLoaded(true)
             ws.send(JSON.stringify({ type: "createTransport" }));
           } catch (err: any) {
@@ -62,11 +63,11 @@ export default function Home() {
         case "transportCreated":
           try {
             const producerTransport = device.createSendTransport<TransportOptions>({
-              id: data.id,
-              iceParameters: data.iceParameters,
-              iceCandidates: data.iceCandidates,
-              dtlsParameters: data.dtlsParameters,
-              sctpParameters: data.sctpParameters
+              id: parsed.payload.id,
+              iceParameters: parsed.payload.iceParameters,
+              iceCandidates: parsed.payload.iceCandidates,
+              dtlsParameters: parsed.payload.dtlsParameters,
+              sctpParameters: parsed.payload.sctpParameters
             })
 
             producerTransport.on("connect", async ({ dtlsParameters }, callback) => {
@@ -117,11 +118,11 @@ export default function Home() {
 
         case "consumerTransportCreated":
           const consumerTransport = device.createRecvTransport({
-            id: data.id,
-            iceParameters: data.iceParameters,
-            iceCandidates: data.iceCandidates,
-            dtlsParameters: data.dtlsParameters,
-            sctpParameters: data.sctpParameters
+            id: parsed.payload.id,
+            iceParameters: parsed.payload.iceParameters,
+            iceCandidates: parsed.payload.iceCandidates,
+            dtlsParameters: parsed.payload.dtlsParameters,
+            sctpParameters: parsed.payload.sctpParameters
           })
           consumerTransportRef.current = consumerTransport;
 
@@ -155,29 +156,29 @@ export default function Home() {
           break;
 
         case "produce-data":
-          produceCallback?.({ id: data.id });
+          produceCallback?.({ id: parsed.payload.id });
           produceCallback = null;
-          console.log("Producer confirmed:", data.id);
+          console.log("Producer confirmed:", parsed.payload.id);
           break;
 
         case "newConsumer":
           (async () => {
             setremoteProducerIds(prev => {
-              if (!prev?.includes(data.producerId)) {
-                return [...prev, data.producerId]
+              if (!prev?.includes(parsed.payload.producerId)) {
+                return [...prev, parsed.payload.producerId]
               }
               return prev
             })
             const consumerTransport = consumerTransportRef.current!;
 
             const consumer = await consumerTransport.consume({
-              id: data.id,
-              producerId: data.producerId,
-              kind: data.kind,
-              rtpParameters: data.rtpParameters,
+              id: parsed.payload.id,
+              producerId: parsed.payload.producerId,
+              kind: parsed.payload.kind,
+              rtpParameters: parsed.payload.rtpParameters,
             });
 
-            consumerRef.current.set(data.producerId, consumer)
+            consumerRef.current.set(parsed.payload.producerId, consumer)
 
             await consumer.resume();
 

@@ -1,51 +1,48 @@
-import { DtlsParameters, RtpCapabilities } from 'mediasoup-client/types';
+import { TransportOptions } from 'mediasoup-client/types';
 
 export interface BaseMessage<Type extends string, Payload = {}> {
   type: Type;
   payload: Payload;
 }
 
-export interface CreateRoomMessage extends BaseMessage<'create-room'> {}
-export interface JoinRoomMessage extends BaseMessage<'join-room', { joinRoomId: string }> {}
-export interface GetRtpCapabilitiesMessage extends BaseMessage<'getRtpCapabilities'> {}
-export interface CreateTransportMessage extends BaseMessage<'createTransport'> {}
-export interface TransportConnectMessage extends BaseMessage<
-  'transport-connect',
+export interface RoomCreatedMessage extends BaseMessage<'room-created', { roomId: string }> {}
+export interface JoinedRoomMessage extends BaseMessage<
+  'joined-room',
   {
-    transportId: string;
-    dtlsParameters: DtlsParameters;
+    joinRoomId: string;
+    peerId: string;
+    existingPeerIds: string[];
   }
 > {}
 
-export interface TransportProduceMessage extends BaseMessage<
-  'transport-produce',
+export interface RtpCapabilitiesMessage extends BaseMessage<
+  'rtpCapabilities',
+  { rtpCapabilities: any }
+> {}
+
+export interface TransportCreatedMessage extends BaseMessage<
+  'transportCreated',
+  TransportOptions
+> {}
+export interface ConsumerTransportCreatedMessage extends BaseMessage<
+  'consumerTransportCreated',
+  TransportOptions
+> {}
+export interface ProduceDataMessage extends BaseMessage<'produce-data', { id: string }> {}
+export interface NewConsumerMessage extends BaseMessage<
+  'newConsumer',
   {
-    transportId: string;
+    id: string;
+    producerId: string;
     kind: 'audio' | 'video';
     rtpParameters: any;
-    appData?: Record<string, unknown>;
   }
 > {}
-
-export interface CreateConsumerTransportMessage extends BaseMessage<'create-consumerTransport'> {}
-export interface ConsumeMessage extends BaseMessage<'consume', {
-  rtpCapabilities: RtpCapabilities;
-}> {}
-
-export interface ConsumerConnectMessage extends BaseMessage<'consumer-connect', {
-  transportId: string;
-  dtlsParameters: DtlsParameters;
-}> {}
-export interface ConsumerReadyMessage extends BaseMessage<'consumer-ready', { consumerId?: string }> {}
-
-export type ClientToServerMessage =
-  | CreateRoomMessage
-  | JoinRoomMessage
-  | GetRtpCapabilitiesMessage
-  | CreateTransportMessage
-  | TransportConnectMessage
-  | TransportProduceMessage
-  | CreateConsumerTransportMessage
-  | ConsumeMessage
-  | ConsumerConnectMessage
-  | ConsumerReadyMessage;
+export type ServerToClientMessage =
+  | RoomCreatedMessage
+  | JoinedRoomMessage
+  | RtpCapabilitiesMessage
+  | TransportCreatedMessage
+  | ConsumerTransportCreatedMessage
+  | ProduceDataMessage
+  | NewConsumerMessage;
