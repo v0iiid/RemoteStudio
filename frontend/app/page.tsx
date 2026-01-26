@@ -8,13 +8,13 @@ export default function Home() {
   const deviceRef = useRef<mediasoupClient.Device | null>(null);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<Map<string, HTMLVideoElement>>(new Map());
-  const [remoteProducerIds, setremoteProducterIds] = useState<string[] | null>([])
+  const [remoteProducerIds, setremoteProducterIds] = useState<string[]>([])
   const [loaded, setLoaded] = useState(false);
   const [publish, setPublish] = useState(false);
   const producerTransportRef = useRef<Transport | null>(null)
   const consumerTransportRef = useRef<Transport | null>(null)
   const hasProducedRef = useRef<boolean>(false);
-  const producerRef = useRef<Producer | null>(null)
+  const producerRef = useRef<Map<string, Producer>>(new Map())
   const consumerRef = useRef<Map<string, Consumer>>(new Map())
 
   let produceCallback: ((data: { id: string }) => void) | null = null;
@@ -146,9 +146,7 @@ export default function Home() {
               );
             }
           });
-          consumerTransport.on('connectionstatechange', (state) => {
-            console.log('TRANSPORT STATE →', state);
-          });
+
 
           ws.send(JSON.stringify({
             type: "consume",
@@ -164,6 +162,12 @@ export default function Home() {
 
         case "newConsumer":
           (async () => {
+            setremoteProducterIds(prev => {
+              if (!prev?.includes(data.producerId)) {
+                return [...prev, data.producerId]
+              }
+              return prev
+            })
             const consumerTransport = consumerTransportRef.current!;
 
             const consumer = await consumerTransport.consume({
@@ -244,13 +248,34 @@ export default function Home() {
           }
         });
 
-      producerRef.current = producer
+      producerRef.current.set(producer.id, producer)
       hasProducedRef.current = true
     }
     if (!hasProducedRef.current) {
       produce()
     }
   }, [publish])
+
+  useEffect(() => {
+    remoteProducerIds.forEach(pid => {
+      const videoEl = remoteVideoRef.current.get(pid);
+      const consumer = consumerRef.current.get(pid);
+      if (videoEl && consumer && !videoEl.srcObject) {
+        videoEl.srcObject = new MediaStream([consumer.track]);
+        videoEl.play();
+      }
+    });
+  }, [remoteProducerIds]);
+
+  function attachVideoRef(producerId: string, el: HTMLVideoElement | null) {
+    if (!remoteVideoRef.current) return;
+
+    if (el) {
+      remoteVideoRef.current.set(producerId, el);
+    } else {
+      remoteVideoRef.current.delete(producerId);
+    }
+  }
 
   return <div className="font-medium p-2 text-xl text-green-500">
     <p>Show Logs</p>
@@ -305,7 +330,7 @@ export default function Home() {
             <video
               className='rounded-xl'
               key={producerId}
-              ref={el => attachVideoRef(producerId,el)}
+              ref={el => attachVideoRef(producerId, el)}
               playsInline
               muted
               controls
