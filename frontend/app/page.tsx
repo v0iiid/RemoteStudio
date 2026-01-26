@@ -7,15 +7,15 @@ export default function Home() {
   const socketRef = useRef<WebSocket | null>(null);
   const deviceRef = useRef<mediasoupClient.Device | null>(null);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+  const remoteVideoRef = useRef<Map<string, HTMLVideoElement>>(new Map());
+  const [remoteProducerIds, setremoteProducterIds] = useState<string[] | null>([])
   const [loaded, setLoaded] = useState(false);
   const [publish, setPublish] = useState(false);
   const producerTransportRef = useRef<Transport | null>(null)
   const consumerTransportRef = useRef<Transport | null>(null)
   const hasProducedRef = useRef<boolean>(false);
   const producerRef = useRef<Producer | null>(null)
-  const consumerRef = useRef<Consumer | null>(null)
-
+  const consumerRef = useRef<Map<string, Consumer>>(new Map())
 
   let produceCallback: ((data: { id: string }) => void) | null = null;
   useEffect(() => {
@@ -27,7 +27,6 @@ export default function Home() {
     ws.onopen = () => {
       console.log('WebSocket connected');
       ws.send(JSON.stringify({ type: "create-room" }));
-
     };
 
     ws.onmessage = async (event) => {
@@ -39,12 +38,13 @@ export default function Home() {
             type: "join-room",
             roomId: data.roomId,
           }));
-          break;
-        case "joined-room":
-          console.log("joined room:", data.roomId);
-          console.log("peers:", data.peerCount);
           ws.send(JSON.stringify({ type: 'getRtpCapabilities' }));
           break;
+        // case "joined-room":
+        //   console.log("joined room:", data.roomId);
+        //   ws.send(JSON.stringify({ type: 'getRtpCapabilities' }));
+        //   break;
+
         case "rtpCapabilities":
           try {
             await device.load({ routerRtpCapabilities: data.rtpCapabilities })
@@ -58,6 +58,7 @@ export default function Home() {
             }
           };
           break;
+
         case "transportCreated":
           try {
             const producerTransport = device.createSendTransport<TransportOptions>({
@@ -113,6 +114,7 @@ export default function Home() {
             console.log("error in createTransport", err)
           }
           break;
+
         case "consumerTransportCreated":
           const consumerTransport = device.createRecvTransport({
             id: data.id,
@@ -153,11 +155,13 @@ export default function Home() {
             data: { rtpCapabilities: device.rtpCapabilities }
           }));
           break;
+
         case "produce-data":
           produceCallback?.({ id: data.id });
           produceCallback = null;
           console.log("Producer confirmed:", data.id);
           break;
+
         case "newConsumer":
           (async () => {
             const consumerTransport = consumerTransportRef.current!;
@@ -169,14 +173,12 @@ export default function Home() {
               rtpParameters: data.rtpParameters,
             });
 
-            consumerRef.current = consumer;
+            consumerRef.current.set(data.producerId, consumer)
 
-            // 🔥 CRITICAL
             await consumer.resume();
 
             const track = consumer.track;
 
-            // 🔥 WAIT for actual media flow
             if (track.muted) {
               await new Promise<void>((resolve) => {
                 track.onunmute = () => resolve();
@@ -185,7 +187,11 @@ export default function Home() {
 
             const stream = new MediaStream([track]);
 
-            const video = remoteVideoRef.current!;
+            const video = remoteVideoRef.current.get(data.producerId)
+            if (!video) {
+              console.warn("Video element for producer not found:", data.producerId);
+              return;
+            };
             video.srcObject = stream;
             video.muted = true;
             await video.play();
@@ -193,9 +199,9 @@ export default function Home() {
             console.log("Remote video playing");
           })();
           break;
-
       }
     };
+
     ws.onerror = (err) => {
       console.error('WebSocket error', err);
     };
@@ -203,7 +209,7 @@ export default function Home() {
     return () => {
       ws.close();
       producerRef.current?.close();
-      consumerRef.current?.close();
+      consumerRef.current.forEach(c => c.close());
       producerTransportRef.current?.close();
       consumerTransportRef.current?.close();
       producerTransportRef.current?.close()
@@ -245,6 +251,7 @@ export default function Home() {
       produce()
     }
   }, [publish])
+
   return <div className="font-medium p-2 text-xl text-green-500">
     <p>Show Logs</p>
     <button
@@ -293,21 +300,21 @@ export default function Home() {
             className='bg-sky-400 text-white px-2 py-1 text-sm cursor-pointer rounded-lg'>Consume</button>
         </div>
         <div className='my-20 mx-44 bg-black w-fit rounded-xl'>
-          <button
-            onClick={() => remoteVideoRef.current?.play()}
-            className="bg-blue-500 text-white px-2 py-1 rounded"
-          >
-            Play Remote Video
-          </button>
-          <video
-            className='rounded-xl'
-            ref={remoteVideoRef}
 
-            playsInline
-            muted
-            controls
-            width={400}
-            height={200} />
+          {remoteProducerIds!.map(producerId => (
+            <video
+              className='rounded-xl'
+              key={producerId}
+              ref={el => attachVideoRef(producerId,el)}
+              playsInline
+              muted
+              controls
+              width={400}
+              height={200} />
+          ))}
+
+
+
         </div>
       </div>
     </div>
