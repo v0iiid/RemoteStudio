@@ -195,6 +195,7 @@ export async function consume(data: any, socket: WebSocket) {
 
   if (!peer || !peer.consumerTransport) return;
   const { producerId, rtpCapabilities } = data;
+  console.log("can't con",data)
   if (
     !router.canConsume({
       producerId: producerId,
