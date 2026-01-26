@@ -8,7 +8,7 @@ export default function Home() {
   const deviceRef = useRef<mediasoupClient.Device | null>(null);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<Map<string, HTMLVideoElement>>(new Map());
-  const [remoteProducerIds, setremoteProducterIds] = useState<string[]>([])
+  const [remoteProducerIds, setremoteProducerIds] = useState<string[]>([])
   const [loaded, setLoaded] = useState(false);
   const [publish, setPublish] = useState(false);
   const producerTransportRef = useRef<Transport | null>(null)
@@ -36,7 +36,7 @@ export default function Home() {
         case "room-created":
           ws.send(JSON.stringify({
             type: "join-room",
-            roomId: data.roomId,
+            data:{joinRoomId:data.roomId} ,
           }));
           ws.send(JSON.stringify({ type: 'getRtpCapabilities' }));
           break;
@@ -162,7 +162,7 @@ export default function Home() {
 
         case "newConsumer":
           (async () => {
-            setremoteProducterIds(prev => {
+            setremoteProducerIds(prev => {
               if (!prev?.includes(data.producerId)) {
                 return [...prev, data.producerId]
               }
@@ -207,7 +207,6 @@ export default function Home() {
       consumerRef.current.forEach(c => c.close());
       producerTransportRef.current?.close();
       consumerTransportRef.current?.close();
-      producerTransportRef.current?.close()
       remoteVideoRef.current.clear();
       localVideoRef.current?.pause()
       ws.onmessage = null;
