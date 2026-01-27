@@ -16,7 +16,7 @@ export async function joinRoom(payload: any, socket: WebSocket) {
       type: "error",
       reason: "ROOM_NOT_FOUND",
     });
-    return;
+    return
   }
 
   const room = rooms.get(joinRoomId)!;
