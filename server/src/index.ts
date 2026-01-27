@@ -68,7 +68,6 @@ async function start() {
   webRtcServer = await initWebRtcServer();
 
   const worker = await initWorker();
-  console.log("ran tim1")
   server.on("connection", async (socket) => {
     console.log("Client connected");
 
@@ -83,7 +82,6 @@ async function start() {
         }
 
         case "join-room": {
-          console.log("join room",parsed)
           joinRoom(parsed.payload, socket);
           break;
         }
@@ -108,6 +106,7 @@ async function start() {
         }
 
         case "consumer-connect": {
+          console.log("consumer connected")
           consumerConnect(parsed.payload, socket);
           break;
         }

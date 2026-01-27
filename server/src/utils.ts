@@ -4,6 +4,7 @@ import type { types as mediasoupTypes } from "mediasoup";
 import type WebSocket from "ws";
 
 export async function createRoom(roomId: string, worker: Worker): Promise<Room> {
+
   const mediaCodecs: mediasoupTypes.RtpCodecCapability[] = [
     {
       kind: "audio",
@@ -19,15 +20,14 @@ export async function createRoom(roomId: string, worker: Worker): Promise<Room> 
       preferredPayloadType: 101,
     },
   ];
-
   const router = await worker.createRouter({ mediaCodecs });
   const room: Room = {
     id: roomId,
     router,
     peers: new Map(),
   };
-  rooms.set(roomId, room);
 
+  rooms.set(roomId, room);
   return room;
 }
 
@@ -63,13 +63,16 @@ export function cleanupPeer(socket: WebSocket, roomId: string) {
 
 
 export function getContext(socket: WebSocket) {
+
   const peerId = wsToPeerId.get(socket);
+
   if (!peerId) return;
 
   const roomId = peerIdToRoomId.get(peerId);
 
   if (!roomId) return;
   const room = rooms.get(roomId);
+
   if (!room) return;
 
   const peer = room.peers.get(peerId);
@@ -84,6 +87,7 @@ export function sendJson(socket:WebSocket,data:any){
 
 export function safeContext(socket:WebSocket){
   const ctx = getContext(socket)
+
   if (!ctx) throw new Error("invalid context")
     return ctx
 }

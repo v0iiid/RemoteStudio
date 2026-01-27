@@ -5,7 +5,6 @@ import type WebSocket from "ws";
 
 export async function createNewRoom(worker: Worker, socket: WebSocket) {
   const roomId = createRoomId();
-  sendJson(socket, { type: "room-created", payload: { roomId } });
 
   const room = await createRoom(roomId, worker);
   const peerId = createPeerId();
@@ -22,12 +21,11 @@ export async function createNewRoom(worker: Worker, socket: WebSocket) {
   room.peers.set(peerId, peer);
   rooms.set(roomId, room);
   wsToPeerId.set(socket, peerId);
+  sendJson(socket, { type: "room-created", payload: { roomId } });
 }
 
 export async function joinRoom(payload: any, socket: WebSocket) {
-  console.log("payload", payload);
   const { joinRoomId } = payload;
-
   if (!rooms.has(joinRoomId)) {
     sendJson(socket, {
       type: "error",
@@ -37,7 +35,6 @@ export async function joinRoom(payload: any, socket: WebSocket) {
   }
 
   const room = rooms.get(joinRoomId)!;
-
   const peerId = createPeerId();
   const peer: Peer = {
     id: peerId,
@@ -51,7 +48,6 @@ export async function joinRoom(payload: any, socket: WebSocket) {
   room.peers.set(peerId, peer);
   peerIdToRoomId.set(peerId, room.id);
   wsToPeerId.set(socket, peerId);
-
   const existingPeerIds = [...room.peers.keys()].filter((id) => id !== peerId);
 
   sendJson(socket, {
@@ -84,7 +80,6 @@ export function getRtpCapabilities(socket: WebSocket) {
 }
 
 export async function createProducerTransport(webRtcServer: WebRtcServer, socket: WebSocket) {
-  console.log("webrtcserver", webRtcServer);
   const { peer, router } = safeContext(socket);
 
   const producerTransport = await router.createWebRtcTransport({
@@ -110,7 +105,6 @@ export async function createProducerTransport(webRtcServer: WebRtcServer, socket
 export async function producerTransportConnect(payload: any, socket: WebSocket) {
   const { peer } = safeContext(socket);
   const { dtlsParameters } = payload;
-  console.log("dtlsparmas", payload);
   if (!peer?.producerTransport) return;
 
   await peer.producerTransport.connect({
@@ -131,44 +125,31 @@ export async function consumerConnect(payload: any, socket: WebSocket) {
 }
 
 export async function transportProduce(payload: any, socket: WebSocket) {
-  const { peer, room, router } = safeContext(socket);
-
-  const { kind, rtpParameters, appData } = payload;
+  const { peer } = safeContext(socket);
 
   if (!peer?.producerTransport) return;
 
+  const { kind, rtpParameters, appData } = payload;
+
   const producer = await peer.producerTransport.produce<ProducerOptions>({
-    kind: kind,
-    rtpParameters: rtpParameters,
-    appData: appData,
+    kind,
+    rtpParameters,
+    appData,
   });
+
   peer.producers.set(producer.id, producer);
+
   sendJson(socket, {
     type: "produce-data",
     payload: { id: producer.id },
   });
 
   console.log("producer-id:", producer.id);
-
-  for (const [otherPeerId, otherPeer] of room.peers) {
-    if (otherPeerId == peer.id) continue;
-    if (!otherPeer.consumerTransport) continue;
-
-    const { rtpCapabilities } = otherPeer;
-    if (!router.canConsume({ producerId: producer.id, rtpCapabilities })) continue;
-
-    const consumer = await otherPeer.consumerTransport.consume({
-      producerId: producer.id,
-      rtpCapabilities: rtpCapabilities,
-    });
-    sendJson(otherPeer.ws, {
-      type: "newConsumer",
-      payload: { id: consumer.id, producerId: producer.id, kind: consumer.kind, rtpParameters: consumer.rtpParameters },
-    });
-  }
 }
+
 export async function createConsumerTransport(webRtcServer: WebRtcServer, socket: WebSocket) {
-  const { peer, router } = safeContext(socket);
+  const { peer, room, router } = safeContext(socket);
+
   const consumerTransport = await router.createWebRtcTransport({
     webRtcServer,
     enableUdp: true,
@@ -176,7 +157,9 @@ export async function createConsumerTransport(webRtcServer: WebRtcServer, socket
     preferUdp: true,
     enableSctp: true,
   });
+
   peer.consumerTransport = consumerTransport;
+
   sendJson(socket, {
     type: "consumerTransportCreated",
     payload: {
@@ -187,6 +170,29 @@ export async function createConsumerTransport(webRtcServer: WebRtcServer, socket
       sctpParameters: consumerTransport.sctpParameters,
     },
   });
+
+  for (const [, otherPeer] of room.peers) {
+    for (const producer of otherPeer.producers.values()) {
+      if (!router.canConsume({ producerId: producer.id, rtpCapabilities: peer.rtpCapabilities })) continue;
+
+      const consumer = await consumerTransport.consume({
+        producerId: producer.id,
+        rtpCapabilities: peer.rtpCapabilities,
+        paused: false,
+      });
+      peer.consumers.set(consumer.id, consumer);
+
+      sendJson(peer.ws, {
+        type: "newConsumer",
+        payload: {
+          id: consumer.id,
+          producerId: producer.id,
+          kind: consumer.kind,
+          rtpParameters: consumer.rtpParameters,
+        },
+      });
+    }
+  }
 }
 
 export async function consume(payload: any, socket: WebSocket) {
@@ -206,19 +212,29 @@ export async function consume(payload: any, socket: WebSocket) {
         console.log("the router can't consume");
         continue;
       }
+
       console.log("can it consumer", router.canConsume({ producerId: producer.id, rtpCapabilities: rtpCapabilities }));
       const consumer = await peer.consumerTransport.consume({
         producerId: producer.id,
         rtpCapabilities: rtpCapabilities,
         paused: true,
       });
+      setInterval(async () => {
+        if (consumer.closed) return;
+        const stats = await consumer.getStats();
+        stats.forEach((stat) => {
+          console.log("📊 Consumer bitrate OUT:", stat.bitrate);
+        });
+      }, 3000);
       peer.consumers.set(consumer.id, consumer);
       sendJson(socket, {
         type: "newConsumer",
-       payload:{ id: consumer.id,
-        producerId: producer.id,
-        kind: consumer.kind,
-        rtpParameters: consumer.rtpParameters,}
+        payload: {
+          id: consumer.id,
+          producerId: producer.id,
+          kind: consumer.kind,
+          rtpParameters: consumer.rtpParameters,
+        },
       });
     }
   }
@@ -229,7 +245,7 @@ export async function consumerReady(payload: any, socket: WebSocket) {
   const { consumerId } = payload;
   const consumer = peer.consumers.get(consumerId);
   if (!consumer) return;
-
+  console.log("Consumer paused:", consumer.paused);
   await consumer.requestKeyFrame();
   await consumer.resume();
   console.log("consumer resumed on backend");

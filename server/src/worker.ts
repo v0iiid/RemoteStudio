@@ -1,6 +1,5 @@
 import * as mediasoup from "mediasoup";
 import type { types as mediasoupTypes } from "mediasoup";
-import { rooms, type Room } from "./index.js";
 
 let worker: mediasoupTypes.Worker;
 let router: mediasoupTypes.Router;
