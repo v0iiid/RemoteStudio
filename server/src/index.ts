@@ -63,30 +63,39 @@ export function createPeerId(): string {
   return `peer-${randomUUID()}`;
 }
 let webRtcServer: WebRtcServer;
+const worker = await initWorker();
+const app = express();
+
+app.get("/api/create-room", (req, res) => {
+  createNewRoom(worker);
+});
+
+app.listen(5000, () => {
+  console.log("Sever running on port 5000");
+});
 async function start() {
   const server = new WebSocketServer({ port: 8081 });
   webRtcServer = await initWebRtcServer();
 
-  const worker = await initWorker();
   server.on("connection", async (socket) => {
     console.log("Client connected");
 
     socket.on("message", async (message) => {
-      const parsed:ClientToServerMessage = JSON.parse(message.toString());
+      const parsed: ClientToServerMessage = JSON.parse(message.toString());
       console.log("type->", parsed.type);
 
       switch (parsed.type) {
-        case "create-room": {
-          createNewRoom( worker, socket);
-          break;
-        }
+        // case "create-room": {
+        //   createNewRoom(worker, socket);
+        //   break;
+        // }
 
         case "join-room": {
           joinRoom(parsed.payload, socket);
           break;
         }
 
-        case 'close-room': {
+        case "close-room": {
           close(socket);
 
           break;
@@ -106,7 +115,7 @@ async function start() {
         }
 
         case "consumer-connect": {
-          console.log("consumer connected")
+          console.log("consumer connected");
           consumerConnect(parsed.payload, socket);
           break;
         }

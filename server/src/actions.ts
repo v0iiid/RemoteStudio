@@ -3,25 +3,10 @@ import { createPeerId, createRoomId, peerIdToRoomId, rooms, wsToPeerId, type Pee
 import { cleanupPeer, createRoom, getRoomAndRouter, safeContext, sendJson } from "./utils.js";
 import type WebSocket from "ws";
 
-export async function createNewRoom(worker: Worker, socket: WebSocket) {
+export async function createNewRoom(worker: Worker) {
   const roomId = createRoomId();
-
-  const room = await createRoom(roomId, worker);
-  const peerId = createPeerId();
-  const peer: Peer = {
-    id: peerId,
-    roomId: roomId,
-    ws: socket,
-    producerTransport: undefined,
-    consumerTransport: undefined,
-    producers: new Map(),
-    consumers: new Map(),
-  };
-  peerIdToRoomId.set(peerId, roomId);
-  room.peers.set(peerId, peer);
-  rooms.set(roomId, room);
-  wsToPeerId.set(socket, peerId);
-  sendJson(socket, { type: "room-created", payload: { roomId } });
+  await createRoom(roomId, worker);
+  return roomId;
 }
 
 export async function joinRoom(payload: any, socket: WebSocket) {
