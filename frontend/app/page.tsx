@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 
 export default function Home() {
   const socketRef = useRef<WebSocket | null>(null);
+  const [roomIdInput, setRoomIdInput] = useState("");
   const deviceRef = useRef<mediasoupClient.Device | null>(null);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<Map<string, HTMLVideoElement>>(new Map());
@@ -27,27 +28,27 @@ export default function Home() {
 
     ws.onopen = () => {
       console.log('WebSocket connected');
-      ws.send(JSON.stringify({ type: "create-room" }));
     };
 
     ws.onmessage = async (message) => {
-      const parsed:ServerToClientMessage = JSON.parse(message.toString())
+      const parsed: ServerToClientMessage = JSON.parse(message.data.toString())
       console.log("type->", parsed.type)
       switch (parsed.type) {
         case "room-created":
           ws.send(JSON.stringify({
             type: "join-room",
-            data:{joinRoomId:parsed.payload.roomId} ,
+            payload: { joinRoomId: parsed.payload.roomId },
           }));
           ws.send(JSON.stringify({ type: 'getRtpCapabilities' }));
           break;
-        // case "joined-room":
-        //   console.log("joined room:", data.roomId);
-        //   ws.send(JSON.stringify({ type: 'getRtpCapabilities' }));
-        //   break;
+
+        case "joined-room":
+          ws.send(JSON.stringify({ type: 'getRtpCapabilities' }));
+          break;
 
         case "rtpCapabilities":
           try {
+
             await device.load({ routerRtpCapabilities: parsed.payload.rtpCapabilities })
             setLoaded(true)
             ws.send(JSON.stringify({ type: "createTransport" }));
@@ -72,10 +73,10 @@ export default function Home() {
 
             producerTransport.on("connect", async ({ dtlsParameters }, callback) => {
               try {
-                console.log("calling connect")
+
                 ws.send(JSON.stringify({
                   type: "transport-connect",
-                  data: {
+                  payload: {
                     transportId: producerTransport.id,
                     dtlsParameters
                   }
@@ -87,7 +88,7 @@ export default function Home() {
             })
             producerTransport.on("produce", (parameters, callback, errback) => {
               try {
-                console.log("calling produce")
+
                 const ws = socketRef.current;
                 if (!ws) return;
 
@@ -95,7 +96,7 @@ export default function Home() {
 
                 ws.send(JSON.stringify({
                   type: "transport-produce",
-                  data: {
+                  payload: {
                     transportId: producerTransport.id,
                     kind: parameters.kind,
                     rtpParameters: parameters.rtpParameters,
@@ -128,9 +129,10 @@ export default function Home() {
 
           consumerTransport.on("connect", async ({ dtlsParameters }, callback) => {
             try {
+              console.log("called connected")
               ws.send(JSON.stringify({
                 type: "consumer-connect",
-                data: { transportId: consumerTransport.id, dtlsParameters }
+                payload: { transportId: consumerTransport.id, dtlsParameters }
               }));
               callback();
             } catch (err) {
@@ -139,26 +141,21 @@ export default function Home() {
           });
 
           consumerTransport.on("connectionstatechange", (state) => {
-            console.log("Consumer transport state:", state);
 
             if (state === "connected") {
-              socketRef.current?.send(
-                JSON.stringify({ type: "consumer-ready" })
-              );
+              console.log("is connected")
             }
           });
 
-
           ws.send(JSON.stringify({
             type: "consume",
-            data: { rtpCapabilities: device.rtpCapabilities }
+            payload: { rtpCapabilities: device.rtpCapabilities }
           }));
           break;
 
         case "produce-data":
           produceCallback?.({ id: parsed.payload.id });
           produceCallback = null;
-          console.log("Producer confirmed:", parsed.payload.id);
           break;
 
         case "newConsumer":
@@ -169,6 +166,7 @@ export default function Home() {
               }
               return prev
             })
+
             const consumerTransport = consumerTransportRef.current!;
 
             const consumer = await consumerTransport.consume({
@@ -178,10 +176,20 @@ export default function Home() {
               rtpParameters: parsed.payload.rtpParameters,
             });
 
+            await waitForTransportConnected(consumerTransport);
+
+            console.log("Consumer created:", consumer);
+            console.log("Track state:", consumer.track.readyState);
+            console.log("Consumer track ready:", consumer.track);
+            console.log("Track kind:", consumer.track.kind);
+            console.log("Track muted:", consumer.track.muted);
+            console.log("Track enabled:", consumer.track.enabled);
             consumerRef.current.set(parsed.payload.producerId, consumer)
-
+            attachConsumerToVideo(parsed.payload.producerId);
             await consumer.resume();
-
+            socketRef.current?.send(
+              JSON.stringify({ type: "consumer-ready", payload: { consumerId: consumer.id } })
+            );
             const track = consumer.track;
 
             if (track.muted) {
@@ -189,8 +197,6 @@ export default function Home() {
                 track.onunmute = () => resolve();
               });
             }
-
-
 
             console.log("Remote video playing");
           })();
@@ -216,6 +222,20 @@ export default function Home() {
     }
   }, [])
 
+  function waitForTransportConnected(transport: Transport) {
+    return new Promise<void>((resolve) => {
+      console.log("wait right->", transport.connectionState)
+      if (transport.connectionState === "connected") return resolve();
+      const handler = (state: string) => {
+        if (state === "connected") {
+          transport.off("connectionstatechange", handler);
+          console.log(" state connected")
+          resolve();
+        }
+      };
+      transport.on("connectionstatechange", handler);
+    });
+  }
   useEffect(() => {
     const transport = producerTransportRef.current;
 
@@ -249,16 +269,7 @@ export default function Home() {
     }
   }, [publish])
 
-  useEffect(() => {
-    remoteProducerIds.forEach(pid => {
-      const videoEl = remoteVideoRef.current.get(pid);
-      const consumer = consumerRef.current.get(pid);
-      if (videoEl && consumer && !videoEl.srcObject) {
-        videoEl.srcObject = new MediaStream([consumer.track]);
-        videoEl.play();
-      }
-    });
-  }, [remoteProducerIds]);
+
 
   function attachVideoRef(producerId: string, el: HTMLVideoElement | null) {
     if (!remoteVideoRef.current) return;
@@ -267,6 +278,19 @@ export default function Home() {
       remoteVideoRef.current.set(producerId, el);
     } else {
       remoteVideoRef.current.delete(producerId);
+    }
+  }
+  function attachConsumerToVideo(producerId: string) {
+    const videoEl = remoteVideoRef.current.get(producerId);
+    const consumer = consumerRef.current.get(producerId);
+
+    if (!videoEl || !consumer) return;
+
+    if (!videoEl.srcObject) {
+      const stream = new MediaStream([consumer.track]);
+      videoEl.srcObject = stream;
+      videoEl.play().catch(() => { });
+      console.log("🎥 Attached stream to video for producer", producerId);
     }
   }
 
@@ -299,7 +323,7 @@ export default function Home() {
           <video
             className='rounded-xl'
             ref={localVideoRef}
-
+            style={{ transform: "scaleX(-1)" }}
             playsInline
             muted
             controls
@@ -326,15 +350,42 @@ export default function Home() {
               ref={el => attachVideoRef(producerId, el)}
               playsInline
               muted
+              autoPlay
               controls
               width={400}
               height={200} />
           ))}
-
-
-
         </div>
       </div>
+    </div>
+    <div>
+      <input
+        type="text"
+        placeholder="Enter room ID"
+        value={roomIdInput}
+        onChange={(e) => setRoomIdInput(e.target.value)}
+        className="border px-2 py-1 rounded"
+      />
+      <button
+        className="bg-blue-500 text-white px-2 py-1 rounded ml-2 cursor-pointer"
+        onClick={() => {
+          if (!socketRef.current || !roomIdInput) return;
+          socketRef.current.send(JSON.stringify({
+            type: "join-room",
+            payload: { joinRoomId: roomIdInput },
+          }));
+        }}
+      >
+        Join Room
+      </button>
+      <button className='bg-red-400 text-white rounded-lg px-2 py-1 ml-4 cursor-pointer'
+        onClick={() => {
+          const ws = socketRef.current;
+          if (!ws) return
+          ws.send(JSON.stringify({ type: "create-room" }));
+
+        }}
+      >Create room</button>
     </div>
   </div>;
 }
