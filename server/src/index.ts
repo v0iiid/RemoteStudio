@@ -1,6 +1,7 @@
 import express from "express";
 import { initWebRtcServer, initWorker } from "./worker.js";
 import http from "http";
+import cors from "cors"
 import WebSocket, { WebSocketServer } from "ws";
 import {
   type Consumer,
@@ -69,9 +70,12 @@ const worker = await initWorker();
 const app = express();
 
 app.use(express.json());
+app.use(cors())
 
-app.post("/api/create-room", (req, res) => {
-  const roomId = createNewRoom(worker);
+app.post("/api/createRoom", async(req, res) => {
+  console.log("in create rom")
+  const roomId =await createNewRoom(worker);
+  console.log("roomId",roomId)
   res.status(200).json({ roomId });
 });
 
@@ -155,6 +159,6 @@ wss.on("connection", async (socket) => {
   });
 });
 
-httpServer.listen(8080, () => {
-  console.log("Sever running on port 5000");
+httpServer.listen(8000, () => {
+  console.log("Sever running on port 8000");
 });
