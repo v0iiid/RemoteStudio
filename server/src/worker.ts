@@ -30,13 +30,13 @@ export async function initWebRtcServer() {
       {
         protocol: "udp",
         ip: "0.0.0.0",
-        announcedIp: "127.0.0.1",
+        announcedIp: "10.200.30.193",
         port: 20005,
       },
       {
         protocol: "tcp",
         ip: "0.0.0.0",
-        announcedIp: "127.0.0.1",
+        announcedIp: "10.200.30.193",
         port: 20005,
       },
     ],
