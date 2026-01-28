@@ -23,7 +23,8 @@ export default function Room() {
 
   let produceCallback: ((data: { id: string }) => void) | null = null;
   useEffect(() => {
-    const ws = new WebSocket('ws://localhost:8000');
+    const ws = new WebSocket("https://172.26.240.1:8000/");
+
     socketRef.current = ws;
     const device = new mediasoupClient.Device();
     deviceRef.current = device;
@@ -42,6 +43,7 @@ export default function Room() {
       switch (parsed.type) {
         case "joined-room":
           ws.send(JSON.stringify({ type: 'getRtpCapabilities' }));
+          console.log("joined room",parsed.payload.existingPeerIds)
           break;
 
         case "rtpCapabilities":
@@ -304,7 +306,7 @@ export default function Room() {
         <button
           className='px-2 py-1 bg-green-400 text-white/90 rounded m-4 text-sm cursor-pointer'
           onClick={async () => {
-            console.log("preseed")
+            console.log("preseed",navigator)
             const stream = await navigator.mediaDevices.getUserMedia({ video: true });
             if (localVideoRef.current) {
               console.log("getting video")

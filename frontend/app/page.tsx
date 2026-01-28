@@ -6,20 +6,21 @@ import { useRouter } from "next/navigation"
 
 export default function Home() {
   const [roomId, setRoomId] = useState<string>('')
+  const [joinId,setJoinId] =  useState<string>('')
   const router = useRouter();
   const createRoom = async () => {
     console.log("called")
-    const res = await axios.post("http://localhost:8000/api/createRoom")
+    const res = await axios.post("https://10.200.30.193:8000/api/createRoom")
     const data = res.data;
     setRoomId(data.roomId)
   }
   const joinRoom = () => {
-    if (!roomId) {
+    if (!joinId) {
       alert("Please create a room first!")   // show message if empty
       return
     }
 
-    router.push(`/room/${roomId}`)
+    router.push(`/room/${joinId}`)
   }
 
   return (
@@ -34,6 +35,7 @@ export default function Home() {
       >
         Join Room
       </button>
+      <input className="px-2 text-white outline-none mx-2" onChange={(e)=>setJoinId(e.target.value)} value={joinId} placeholder="room id" type="text"  />
 
     </div>
   )
