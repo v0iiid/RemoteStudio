@@ -87,7 +87,7 @@ export function sendJson(socket:WebSocket,data:any){
 
 export function safeContext(socket:WebSocket){
   const ctx = getContext(socket)
-
+  console.log('ctx',ctx)
   if (!ctx) throw new Error("invalid context")
     return ctx
 }

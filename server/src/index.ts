@@ -1,6 +1,6 @@
 import express from "express";
 import { initWebRtcServer, initWorker } from "./worker.js";
-import http from "http";
+import https from "https";
 import cors from "cors"
 import WebSocket, { WebSocketServer } from "ws";
 import {
@@ -29,7 +29,8 @@ import {
   transportProduce,
 } from "./actions.js";
 import type { ClientToServerMessage } from "./type.js";
-
+import fs from "fs"
+import path from "path";
 export interface Peer {
   id: string;
   roomId: string;
@@ -67,10 +68,18 @@ export function createPeerId(): string {
 let webRtcServer: WebRtcServer;
 const worker = await initWorker();
 
+const options = {
+  key: fs.readFileSync("./ssl/key.pem"),
+  cert: fs.readFileSync("./ssl/cert.pem"),
+};
+
 const app = express();
 
 app.use(express.json());
-app.use(cors())
+app.use(cors({
+  origin: ['https://10.200.30.193:3000','http://localhost:3000'],
+  credentials: true,
+}));
 
 app.post("/api/createRoom", async(req, res) => {
   console.log("in create rom")
@@ -87,7 +96,7 @@ app.post("/api/joinRoom", (req, res) => {
   res.status(200).json({ success: true });
 });
 
-const httpServer = http.createServer(app);
+const httpServer = https.createServer(options,app);
 
 const wss = new WebSocketServer({ server:httpServer });
 
@@ -159,6 +168,6 @@ wss.on("connection", async (socket) => {
   });
 });
 
-httpServer.listen(8000, () => {
+httpServer.listen(8000,"0.0.0.0", () => {
   console.log("Sever running on port 8000");
 });
