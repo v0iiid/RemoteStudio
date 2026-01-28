@@ -3,9 +3,11 @@ import { ServerToClientMessage } from '@/app/types/ws-types';
 import * as mediasoupClient from 'mediasoup-client';
 import { Consumer, Producer, Transport, TransportOptions } from 'mediasoup-client/types';
 import { useEffect, useRef, useState } from 'react';
+import { useParams } from "next/navigation"
 
 export default function Room() {
   const socketRef = useRef<WebSocket | null>(null);
+  const { roomId } = useParams<{ roomId: string }>()
   const [roomIdInput, setRoomIdInput] = useState("");
   const deviceRef = useRef<mediasoupClient.Device | null>(null);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -28,27 +30,22 @@ export default function Room() {
 
     ws.onopen = () => {
       console.log('WebSocket connected');
+      ws.send(JSON.stringify({
+        type: "join-room",
+        payload: { joinRoomId: roomId },
+      }));
     };
 
     ws.onmessage = async (message) => {
       const parsed: ServerToClientMessage = JSON.parse(message.data.toString())
       console.log("type->", parsed.type)
       switch (parsed.type) {
-        case "room-created":
-          ws.send(JSON.stringify({
-            type: "join-room",
-            payload: { joinRoomId: parsed.payload.roomId },
-          }));
-          ws.send(JSON.stringify({ type: 'getRtpCapabilities' }));
-          break;
-
         case "joined-room":
           ws.send(JSON.stringify({ type: 'getRtpCapabilities' }));
           break;
 
         case "rtpCapabilities":
           try {
-
             await device.load({ routerRtpCapabilities: parsed.payload.rtpCapabilities })
             setLoaded(true)
             ws.send(JSON.stringify({ type: "createTransport" }));
@@ -303,6 +300,7 @@ export default function Room() {
     </button>
     <div className='flex'>
       <div>
+        <p className='text-white p-10'>roomId :{roomId}</p>
         <button
           className='px-2 py-1 bg-green-400 text-white/90 rounded m-4 text-sm cursor-pointer'
           onClick={async () => {
