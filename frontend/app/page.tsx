@@ -16,7 +16,7 @@ export default function Home() {
   }
   const joinRoom = () => {
     if (!joinId) {
-      alert("Please create a room first!")   // show message if empty
+      alert("Please create a room first!")
       return
     }
 

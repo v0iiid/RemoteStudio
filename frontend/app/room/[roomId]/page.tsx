@@ -4,6 +4,8 @@ import * as mediasoupClient from 'mediasoup-client';
 import { Consumer, Producer, Transport, TransportOptions } from 'mediasoup-client/types';
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from "next/navigation"
+import axios from 'axios';
+import { useRouter } from "next/navigation"
 
 export default function Room() {
   const socketRef = useRef<WebSocket | null>(null);
@@ -20,10 +22,14 @@ export default function Room() {
   const hasProducedRef = useRef<boolean>(false);
   const producerRef = useRef<Map<string, Producer>>(new Map())
   const consumerRef = useRef<Map<string, Consumer>>(new Map())
+  const router = useRouter();
 
   let produceCallback: ((data: { id: string }) => void) | null = null;
   useEffect(() => {
-    const ws = new WebSocket("https://172.26.240.1:8000/");
+
+  }, [])
+  const connectWebSocket = () => {
+    const ws = new WebSocket("https://10.200.30.193:8000/");
 
     socketRef.current = ws;
     const device = new mediasoupClient.Device();
@@ -43,7 +49,7 @@ export default function Room() {
       switch (parsed.type) {
         case "joined-room":
           ws.send(JSON.stringify({ type: 'getRtpCapabilities' }));
-          console.log("joined room",parsed.payload.existingPeerIds)
+          console.log("joined room", parsed.payload.existingPeerIds)
           break;
 
         case "rtpCapabilities":
@@ -207,19 +213,33 @@ export default function Room() {
       console.error('WebSocket error', err);
     };
 
-    return () => {
-      ws.close();
-      producerRef.current.forEach(p => p.close());
-      consumerRef.current.forEach(c => c.close());
-      producerTransportRef.current?.close();
-      consumerTransportRef.current?.close();
-      remoteVideoRef.current.clear();
-      localVideoRef.current?.pause()
-      ws.onmessage = null;
-      ws.onerror = null;
-      console.log('WebSocket closed')
+  }
+  useEffect(() => {
+    if (!roomId) return;
+    const checkRoom = async () => {
+      try {
+        await axios.get(`https://10.200.30.193:8000/api/rooms/${roomId}`);
+        connectWebSocket()
+      } catch (err) {
+        console.error("Room check failed", err);
+        router.replace("/");
+      }
+      checkRoom()
+
+      return () => {
+        socketRef.current?.close();
+        producerRef.current.forEach(p => p.close());
+        consumerRef.current.forEach(c => c.close());
+        producerTransportRef.current?.close();
+        consumerTransportRef.current?.close();
+        remoteVideoRef.current.clear();
+        localVideoRef.current?.pause()
+        socketRef.current!.onmessage = null;
+        socketRef.current!.onerror = null;
+        console.log('WebSocket closed')
+      }
     }
-  }, [])
+  })
 
   function waitForTransportConnected(transport: Transport) {
     return new Promise<void>((resolve) => {
@@ -306,7 +326,7 @@ export default function Room() {
         <button
           className='px-2 py-1 bg-green-400 text-white/90 rounded m-4 text-sm cursor-pointer'
           onClick={async () => {
-            console.log("preseed",navigator)
+            console.log("preseed", navigator)
             const stream = await navigator.mediaDevices.getUserMedia({ video: true });
             if (localVideoRef.current) {
               console.log("getting video")
@@ -359,33 +379,7 @@ export default function Room() {
       </div>
     </div>
     <div>
-      <input
-        type="text"
-        placeholder="Enter room ID"
-        value={roomIdInput}
-        onChange={(e) => setRoomIdInput(e.target.value)}
-        className="border px-2 py-1 rounded"
-      />
-      <button
-        className="bg-blue-500 text-white px-2 py-1 rounded ml-2 cursor-pointer"
-        onClick={() => {
-          if (!socketRef.current || !roomIdInput) return;
-          socketRef.current.send(JSON.stringify({
-            type: "join-room",
-            payload: { joinRoomId: roomIdInput },
-          }));
-        }}
-      >
-        Join Room
-      </button>
-      <button className='bg-red-400 text-white rounded-lg px-2 py-1 ml-4 cursor-pointer'
-        onClick={() => {
-          const ws = socketRef.current;
-          if (!ws) return
-          ws.send(JSON.stringify({ type: "create-room" }));
 
-        }}
-      >Create room</button>
     </div>
   </div>;
 }
