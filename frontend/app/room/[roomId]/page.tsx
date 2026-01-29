@@ -47,6 +47,15 @@ export default function Room() {
       const parsed: ServerToClientMessage = JSON.parse(message.data.toString())
       console.log("type->", parsed.type)
       switch (parsed.type) {
+        case "room-not-found": {
+          console.warn("Room not found");
+          ws.close();
+
+          router.replace("/")
+          socketRef.current = null;
+          return
+        }
+
         case "joined-room":
           ws.send(JSON.stringify({ type: 'getRtpCapabilities' }));
           console.log("joined room", parsed.payload.existingPeerIds)
@@ -212,34 +221,45 @@ export default function Room() {
     ws.onerror = (err) => {
       console.error('WebSocket error', err);
     };
+    ws.onclose = () => router.replace("/");
 
   }
   useEffect(() => {
+
     if (!roomId) return;
+
+    let isMounted = true;
     const checkRoom = async () => {
       try {
         await axios.get(`https://10.200.30.193:8000/api/rooms/${roomId}`);
+
+        if (!isMounted) return
         connectWebSocket()
       } catch (err) {
+        if (!isMounted) return;
         console.error("Room check failed", err);
         router.replace("/");
       }
-      checkRoom()
-
-      return () => {
-        socketRef.current?.close();
-        producerRef.current.forEach(p => p.close());
-        consumerRef.current.forEach(c => c.close());
-        producerTransportRef.current?.close();
-        consumerTransportRef.current?.close();
-        remoteVideoRef.current.clear();
-        localVideoRef.current?.pause()
-        socketRef.current!.onmessage = null;
-        socketRef.current!.onerror = null;
-        console.log('WebSocket closed')
-      }
+      console.log("going for check room")
     }
-  })
+    checkRoom()
+
+    return () => {
+      if (!socketRef.current) return
+      isMounted = false
+      socketRef.current?.close();
+      producerRef.current.forEach(p => p.close());
+      consumerRef.current.forEach(c => c.close());
+      producerTransportRef.current?.close();
+      consumerTransportRef.current?.close();
+      remoteVideoRef.current.clear();
+      localVideoRef.current?.pause()
+      socketRef.current.onmessage = null;
+      socketRef.current.onerror = null;
+      console.log('WebSocket closed')
+    }
+
+  }, [roomId])
 
   function waitForTransportConnected(transport: Transport) {
     return new Promise<void>((resolve) => {
