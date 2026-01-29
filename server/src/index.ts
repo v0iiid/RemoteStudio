@@ -96,6 +96,14 @@ app.post("/api/joinRoom", (req, res) => {
   res.status(200).json({ success: true });
 });
 
+app.get("/api/room/:roomId",(req,res)=>{
+    const { roomId } = req.params;
+    if (!rooms.has(roomId)) {
+    return res.status(404).json({ exists: false });
+  }
+  return res.status(200).json({ exists: true });
+})
+
 const httpServer = https.createServer(options,app);
 
 const wss = new WebSocketServer({ server:httpServer });
