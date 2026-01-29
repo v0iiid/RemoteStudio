@@ -1,7 +1,7 @@
 import express from "express";
 import { initWebRtcServer, initWorker } from "./worker.js";
 import https from "https";
-import cors from "cors"
+import cors from "cors";
 import WebSocket, { WebSocketServer } from "ws";
 import {
   type Consumer,
@@ -17,7 +17,6 @@ import crypto, { randomUUID, type UUID } from "crypto";
 import { cleanupPeer, createRoom, getRoomAndRouter, safeContext, sendJson } from "./utils.js";
 import {
   close,
-  consume,
   consumerConnect,
   consumerReady,
   createConsumerTransport,
@@ -29,7 +28,7 @@ import {
   transportProduce,
 } from "./actions.js";
 import type { ClientToServerMessage } from "./type.js";
-import fs from "fs"
+import fs from "fs";
 import path from "path";
 export interface Peer {
   id: string;
@@ -38,7 +37,7 @@ export interface Peer {
 
   producerTransport: WebRtcTransport | undefined;
   consumerTransport: WebRtcTransport | undefined;
-
+  consumerTransportConnected: boolean;
   producers: Map<string, Producer>;
   consumers: Map<string, Consumer>;
   rtpCapabilities?: any;
@@ -76,15 +75,17 @@ const options = {
 const app = express();
 
 app.use(express.json());
-app.use(cors({
-  origin: ['https://10.200.30.193:3000','http://localhost:3000'],
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: ["https://192.168.1.2:3000", "http://localhost:3000",],
+    credentials: true,
+  }),
+);
 
-app.post("/api/createRoom", async(req, res) => {
-  console.log("in create rom")
-  const roomId =await createNewRoom(worker);
-  console.log("roomId",roomId)
+app.post("/api/createRoom", async (req, res) => {
+
+  const roomId = await createNewRoom(worker);
+
   res.status(200).json({ roomId });
 });
 
@@ -96,18 +97,18 @@ app.post("/api/joinRoom", (req, res) => {
   res.status(200).json({ success: true });
 });
 
-app.get("/api/rooms/:roomId",(req,res)=>{
-    const { roomId } = req.params;
-    console.log("roomId",roomId)
-    if (!rooms.has(roomId as string)) {
+app.get("/api/rooms/:roomId", (req, res) => {
+  const { roomId } = req.params;
+
+  if (!rooms.has(roomId as string)) {
     return res.status(404).json({ exists: false });
   }
   return res.status(200).json({ exists: true });
-})
+});
 
-const httpServer = https.createServer(options,app);
+const httpServer = https.createServer(options, app);
 
-const wss = new WebSocketServer({ server:httpServer });
+const wss = new WebSocketServer({ server: httpServer });
 
 webRtcServer = await initWebRtcServer();
 
@@ -116,10 +117,9 @@ wss.on("connection", async (socket) => {
 
   socket.on("message", async (message) => {
     const parsed: ClientToServerMessage = JSON.parse(message.toString());
-    console.log("type->", parsed.type);
+
 
     switch (parsed.type) {
-
       case "join-room": {
         joinRoom(parsed.payload, socket);
         break;
@@ -144,12 +144,6 @@ wss.on("connection", async (socket) => {
         break;
       }
 
-      case "consumer-connect": {
-        console.log("consumer connected");
-        consumerConnect(parsed.payload, socket);
-        break;
-      }
-
       case "transport-produce": {
         transportProduce(parsed.payload, socket);
         break;
@@ -158,10 +152,12 @@ wss.on("connection", async (socket) => {
         createConsumerTransport(webRtcServer, socket);
         break;
       }
-      case "consume": {
-        consume(parsed.payload, socket);
+      case "consumer-connect": {
+
+        consumerConnect(parsed.payload, socket);
         break;
       }
+
       case "consumer-ready": {
         consumerReady(parsed.payload, socket);
         break;
@@ -177,6 +173,6 @@ wss.on("connection", async (socket) => {
   });
 });
 
-httpServer.listen(8000,"0.0.0.0", () => {
+httpServer.listen(8000, "0.0.0.0", () => {
   console.log("Sever running on port 8000");
 });

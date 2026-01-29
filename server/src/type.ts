@@ -5,37 +5,48 @@ export interface BaseMessage<Type extends string, Payload = {}> {
   payload: Payload;
 }
 
+export interface CreateRoomMessage extends BaseMessage<"create-room"> {}
+export interface CloseRoomMessage extends BaseMessage<"close-room"> {}
+export interface JoinRoomMessage extends BaseMessage<"join-room", { joinRoomId: string }> {}
+export interface GetRtpCapabilitiesMessage extends BaseMessage<"getRtpCapabilities"> {}
 
-export interface CreateRoomMessage extends BaseMessage<'create-room'> {}
-export interface CloseRoomMessage extends BaseMessage<'close-room'>{}
-export interface JoinRoomMessage extends BaseMessage<'join-room', { joinRoomId: string }> {}
-export interface GetRtpCapabilitiesMessage extends BaseMessage<'getRtpCapabilities'> {}
+export interface CreateTransportMessage extends BaseMessage<"createTransport"> {}
+export interface TransportConnectMessage extends BaseMessage<
+  "transport-connect",
+  {
+    transportId: string;
+    dtlsParameters: DtlsParameters;
+  }
+> {}
 
-export interface CreateTransportMessage extends BaseMessage<'createTransport'> {}
-export interface TransportConnectMessage extends BaseMessage<'transport-connect', {
-  transportId: string;
-  dtlsParameters: DtlsParameters;
-}> {}
+export interface TransportProduceMessage extends BaseMessage<
+  "transport-produce",
+  {
+    transportId: string;
+    kind: "audio" | "video";
+    rtpParameters: any;
+    appData?: Record<string, unknown>;
+  }
+> {}
 
-export interface TransportProduceMessage extends BaseMessage<'transport-produce', {
-  transportId: string;
-  kind: 'audio' | 'video';
-  rtpParameters: any;
-  appData?: Record<string, unknown>;
-}> {}
+export interface CreateConsumerTransportMessage extends BaseMessage<"create-consumerTransport"> {}
+export interface ConsumeMessage extends BaseMessage<
+  "consume",
+  {
+    rtpCapabilities: RtpCapabilities;
+  }
+> {}
 
-export interface CreateConsumerTransportMessage extends BaseMessage<'create-consumerTransport'> {}
-export interface ConsumeMessage extends BaseMessage<'consume', {
-  rtpCapabilities: RtpCapabilities;
-}> {}
+export interface ConsumerConnectMessage extends BaseMessage<
+  "consumer-connect",
+  {
+    transportId: string;
+    dtlsParameters: DtlsParameters;
+  }
+> {}
 
-export interface ConsumerConnectMessage extends BaseMessage<'consumer-connect', {
-  transportId: string;
-  dtlsParameters: DtlsParameters;
-}> {}
-
-export interface ConsumerReadyMessage extends BaseMessage<'consumer-ready', { consumerId?: string }> {}
-
+export interface ConsumerReadyMessage extends BaseMessage<"consumer-ready", { consumerId?: string }> {}
+export interface ConsumeExistingMessage extends BaseMessage<"consume-existing",{  peerId: string;}> {}
 
 export type ClientToServerMessage =
   | CreateRoomMessage
@@ -48,4 +59,5 @@ export type ClientToServerMessage =
   | CreateConsumerTransportMessage
   | ConsumeMessage
   | ConsumerConnectMessage
-  | ConsumerReadyMessage;
+  | ConsumerReadyMessage
+  | ConsumeExistingMessage;
