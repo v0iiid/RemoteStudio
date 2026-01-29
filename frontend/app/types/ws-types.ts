@@ -6,13 +6,14 @@ export interface BaseMessage<Type extends string, Payload = {}> {
 }
 
 export interface RoomCreatedMessage extends BaseMessage<'room-created', { roomId: string }> {}
-export interface RoomNotFoundMessage extends BaseMessage<'room-not-found'>{};
+export interface RoomNotFoundMessage extends BaseMessage<'room-not-found'> {}
 export interface JoinedRoomMessage extends BaseMessage<
   'joined-room',
   {
     joinRoomId: string;
     peerId: string;
     existingPeerIds: string[];
+    existingProducerIds:string[]
   }
 > {}
 
@@ -29,6 +30,7 @@ export interface ConsumerTransportCreatedMessage extends BaseMessage<
   'consumerTransportCreated',
   TransportOptions
 > {}
+export interface ConsumerCreatedMessage extends BaseMessage<'consumer-connected'> {}
 export interface ProduceDataMessage extends BaseMessage<'produce-data', { id: string }> {}
 export interface NewConsumerMessage extends BaseMessage<
   'newConsumer',
@@ -45,6 +47,7 @@ export type ServerToClientMessage =
   | JoinedRoomMessage
   | RtpCapabilitiesMessage
   | TransportCreatedMessage
+  | ConsumerCreatedMessage
   | ConsumerTransportCreatedMessage
   | ProduceDataMessage
   | NewConsumerMessage;

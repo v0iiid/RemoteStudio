@@ -10,7 +10,7 @@ export default function Home() {
   const router = useRouter();
   const createRoom = async () => {
     console.log("called")
-    const res = await axios.post("https://10.200.30.193:8000/api/createRoom")
+    const res = await axios.post("https://192.168.1.2:8000/api/createRoom")
     const data = res.data;
     setRoomId(data.roomId)
   }

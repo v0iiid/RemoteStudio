@@ -10,7 +10,6 @@ import { useRouter } from "next/navigation"
 export default function Room() {
   const socketRef = useRef<WebSocket | null>(null);
   const { roomId } = useParams<{ roomId: string }>()
-  const [roomIdInput, setRoomIdInput] = useState("");
   const deviceRef = useRef<mediasoupClient.Device | null>(null);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<Map<string, HTMLVideoElement>>(new Map());
@@ -24,13 +23,14 @@ export default function Room() {
   const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
   const consumerRef = useRef<Map<string, Consumer>>(new Map())
   const router = useRouter();
+  const pendingConsumers = useRef<any[]>([]);
 
   let produceCallback: ((data: { id: string }) => void) | null = null;
   useEffect(() => {
 
   }, [])
   const connectWebSocket = () => {
-    const ws = new WebSocket("https://10.200.30.193:8000/");
+    const ws = new WebSocket("https://192.168.1.2:8000/");
 
     socketRef.current = ws;
     const device = new mediasoupClient.Device();
@@ -58,8 +58,11 @@ export default function Room() {
         }
 
         case "joined-room":
+         const { existingProducerIds } = parsed.payload;
+
+           setremoteProducerIds(existingProducerIds || []);
           ws.send(JSON.stringify({ type: 'getRtpCapabilities' }));
-          console.log("joined room", parsed.payload.existingPeerIds)
+
           break;
 
         case "rtpCapabilities":
@@ -67,6 +70,7 @@ export default function Room() {
             await device.load({ routerRtpCapabilities: parsed.payload.rtpCapabilities })
             setLoaded(true)
             ws.send(JSON.stringify({ type: "createTransport" }));
+            ws.send(JSON.stringify({ type: "create-consumerTransport" }))
           } catch (err: any) {
             if (err.name === "UnsupportedError") {
               console.warn("Browser not supported");
@@ -88,7 +92,6 @@ export default function Room() {
 
             producerTransport.on("connect", async ({ dtlsParameters }, callback) => {
               try {
-
                 ws.send(JSON.stringify({
                   type: "transport-connect",
                   payload: {
@@ -103,7 +106,6 @@ export default function Room() {
             })
             producerTransport.on("produce", (parameters, callback, errback) => {
               try {
-
                 const ws = socketRef.current;
                 if (!ws) return;
 
@@ -155,17 +157,18 @@ export default function Room() {
             }
           });
 
-          consumerTransport.on("connectionstatechange", (state) => {
-
+          consumerTransport.on("connectionstatechange", async (state) => {
             if (state === "connected") {
-              console.log("is connected")
+              console.log("Consumer transport connected, processing queued consumers");
+
+              for (const payload of pendingConsumers.current) {
+                if (!consumerRef.current.has(payload.producerId)) {
+                  await handleNewConsumer(payload, consumerTransport);
+                }
+              }
+              pendingConsumers.current = [];
             }
           });
-
-          ws.send(JSON.stringify({
-            type: "consume",
-            payload: { rtpCapabilities: device.rtpCapabilities }
-          }));
           break;
 
         case "produce-data":
@@ -175,6 +178,8 @@ export default function Room() {
 
         case "newConsumer":
           (async () => {
+
+            console.log("new consumer id", parsed.payload.producerId)
             setremoteProducerIds(prev => {
               if (!prev?.includes(parsed.payload.producerId)) {
                 return [...prev, parsed.payload.producerId]
@@ -184,14 +189,19 @@ export default function Room() {
 
             const consumerTransport = consumerTransportRef.current!;
 
+            if (consumerTransport.connectionState !== "connected") {
+              console.log("Transport not connected, queueing consumer", parsed.payload.producerId);
+              pendingConsumers.current.push(parsed.payload);
+            } else {
+              console.log("handle ---------")
+              await handleNewConsumer(parsed.payload, consumerTransport);
+            }
             const consumer = await consumerTransport.consume({
               id: parsed.payload.id,
               producerId: parsed.payload.producerId,
               kind: parsed.payload.kind,
               rtpParameters: parsed.payload.rtpParameters,
             });
-
-            await waitForTransportConnected(consumerTransport);
 
             console.log("Consumer created:", consumer);
             console.log("Track state:", consumer.track.readyState);
@@ -212,7 +222,6 @@ export default function Room() {
                 track.onunmute = () => resolve();
               });
             }
-
             console.log("Remote video playing");
           })();
           break;
@@ -225,6 +234,20 @@ export default function Room() {
     ws.onclose = () => router.replace("/");
 
   }
+  async function handleNewConsumer(payload: any, transport: Transport) {
+    const consumer = await transport.consume({
+      id: payload.id,
+      producerId: payload.producerId,
+      kind: payload.kind,
+      rtpParameters: payload.rtpParameters,
+    });
+
+    consumerRef.current.set(payload.producerId, consumer);
+    attachConsumerToVideo(payload.producerId);
+
+    await consumer.resume();
+    socketRef.current?.send(JSON.stringify({ type: "consumer-ready", payload: { consumerId: consumer.id } }));
+  }
   useEffect(() => {
 
     if (!roomId) return;
@@ -235,7 +258,10 @@ export default function Room() {
         await axios.get(`https://10.200.30.193:8000/api/rooms/${roomId}`);
 
         if (!isMounted) return
-        connectWebSocket()
+        if (!socketRef.current) {
+          connectWebSocket()
+        }
+
       } catch (err) {
         if (!isMounted) return;
         console.error("Room check failed", err);
@@ -248,7 +274,7 @@ export default function Room() {
     return () => {
       if (!socketRef.current) return
       isMounted = false
-      socketRef.current?.close();
+      socketRef.current.close();
       producerRef.current.forEach(p => p.close());
       consumerRef.current.forEach(c => c.close());
       producerTransportRef.current?.close();
@@ -262,20 +288,8 @@ export default function Room() {
 
   }, [roomId])
 
-  function waitForTransportConnected(transport: Transport) {
-    return new Promise<void>((resolve) => {
-      console.log("wait right->", transport.connectionState)
-      if (transport.connectionState === "connected") return resolve();
-      const handler = (state: string) => {
-        if (state === "connected") {
-          transport.off("connectionstatechange", handler);
-          console.log(" state connected")
-          resolve();
-        }
-      };
-      transport.on("connectionstatechange", handler);
-    });
-  }
+
+
   useEffect(() => {
     const transport = producerTransportRef.current;
 
@@ -306,20 +320,15 @@ export default function Room() {
       }
 
       if (audioTrack) {
-        const audioProducer = await transport.produce(
-          {
-            track: audioTrack,
-            encodings:
-              [
-                { maxBitrate: 100000 },
-                { maxBitrate: 300000 },
-                { maxBitrate: 900000 }
-              ],
-            codecOptions:
-            {
-              videoGoogleStartBitrate: 1000
-            }
-          });
+        const audioProducer = await transport.produce({
+          track: audioTrack,
+
+          codecOptions: {
+            opusStereo: true,
+            opusDtx: true,
+            opusFec: true
+          }
+        });
         producerRef.current.set(audioProducer.id, audioProducer)
       }
       hasProducedRef.current = true
@@ -380,7 +389,11 @@ export default function Room() {
           className='px-2 py-1 bg-green-400 text-white/90 rounded m-4 text-sm cursor-pointer'
           onClick={async () => {
             console.log("preseed", navigator)
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            const stream = await navigator.mediaDevices.getUserMedia({
+              video: true, audio: {
+                echoCancellation: true, noiseSuppression: true
+              }
+            });
 
             if (localVideoRef.current) {
               console.log("getting video")
@@ -411,13 +424,13 @@ export default function Room() {
             onClick={() => {
               const ws = socketRef.current;
               if (!ws) return
-              ws.send(JSON.stringify({ type: "create-consumerTransport" }))
+
             }}
             className='bg-sky-400 text-white px-2 py-1 text-sm cursor-pointer rounded-lg'>Consume</button>
         </div>
         <div className='my-20 mx-44 bg-black w-fit rounded-xl'>
 
-          {remoteProducerIds!.map(producerId => (
+          {remoteProducerIds.length > 0 && remoteProducerIds.map(producerId => (
             <video
               className='rounded-xl'
               key={producerId}
