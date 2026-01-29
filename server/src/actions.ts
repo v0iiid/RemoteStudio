@@ -156,6 +156,7 @@ export async function createConsumerTransport(webRtcServer: WebRtcServer, socket
   });
 
   for (const [, otherPeer] of room.peers) {
+    if (otherPeer.id === peer.id) continue;
     for (const producer of otherPeer.producers.values()) {
       if (!router.canConsume({ producerId: producer.id, rtpCapabilities: peer.rtpCapabilities })) continue;
 
@@ -185,8 +186,9 @@ export async function consume(payload: any, socket: WebSocket) {
   if (!peer || !peer.consumerTransport) return;
   const { rtpCapabilities } = payload;
 
-  for (const [peerIds, peers] of room.peers) {
-    for (const producer of peers.producers.values()) {
+  for (const [otherPeerId, otherPeer] of room.peers) {
+    if(otherPeerId== peer.id) continue;
+    for (const producer of otherPeer.producers.values()) {
       if (
         !router.canConsume({
           producerId: producer.id,
