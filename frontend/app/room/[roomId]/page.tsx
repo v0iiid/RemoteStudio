@@ -21,6 +21,7 @@ export default function Room() {
   const consumerTransportRef = useRef<Transport | null>(null)
   const hasProducedRef = useRef<boolean>(false);
   const producerRef = useRef<Map<string, Producer>>(new Map())
+  const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
   const consumerRef = useRef<Map<string, Consumer>>(new Map())
   const router = useRouter();
 
@@ -282,25 +283,45 @@ export default function Room() {
     if (!localVideoRef.current?.srcObject) return
     const stream: MediaStream = localVideoRef.current.srcObject as MediaStream
     const videoTrack = stream.getVideoTracks()[0];
+    const audioTrack = stream.getAudioTracks()[0];
     console.log("Local video tracks", (localVideoRef.current?.srcObject as MediaStream).getVideoTracks());
     const produce = async () => {
       console.log("calling produce")
-      const producer = await transport.produce(
-        {
-          track: videoTrack,
-          encodings:
-            [
-              { maxBitrate: 100000 },
-              { maxBitrate: 300000 },
-              { maxBitrate: 900000 }
-            ],
-          codecOptions:
+      if (videoTrack) {
+        const videoProducer = await transport.produce(
           {
-            videoGoogleStartBitrate: 1000
-          }
-        });
+            track: videoTrack,
+            encodings:
+              [
+                { maxBitrate: 100000 },
+                { maxBitrate: 300000 },
+                { maxBitrate: 900000 }
+              ],
+            codecOptions:
+            {
+              videoGoogleStartBitrate: 1000
+            }
+          });
+        producerRef.current.set(videoProducer.id, videoProducer)
+      }
 
-      producerRef.current.set(producer.id, producer)
+      if (audioTrack) {
+        const audioProducer = await transport.produce(
+          {
+            track: audioTrack,
+            encodings:
+              [
+                { maxBitrate: 100000 },
+                { maxBitrate: 300000 },
+                { maxBitrate: 900000 }
+              ],
+            codecOptions:
+            {
+              videoGoogleStartBitrate: 1000
+            }
+          });
+        producerRef.current.set(audioProducer.id, audioProducer)
+      }
       hasProducedRef.current = true
     }
     if (!hasProducedRef.current) {
@@ -331,6 +352,18 @@ export default function Room() {
       videoEl.play().catch(() => { });
       console.log("🎥 Attached stream to video for producer", producerId);
     }
+    if (consumer.kind === "audio") {
+      if (!audioRefs.current.has(producerId)) {
+        const audioEl = new Audio();
+        const stream = new MediaStream([consumer.track]);
+        audioEl.srcObject = stream;
+        audioEl.autoplay = true;
+        audioEl.play().catch(() => { });
+        audioRefs.current.set(producerId, audioEl);
+        console.log("🔊 Attached audio for producer", producerId);
+      }
+    }
+
   }
 
   return <div className="font-medium p-2 text-xl text-green-500">
@@ -347,7 +380,8 @@ export default function Room() {
           className='px-2 py-1 bg-green-400 text-white/90 rounded m-4 text-sm cursor-pointer'
           onClick={async () => {
             console.log("preseed", navigator)
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+
             if (localVideoRef.current) {
               console.log("getting video")
               localVideoRef.current.srcObject = stream;
