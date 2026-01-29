@@ -13,10 +13,9 @@ export async function joinRoom(payload: any, socket: WebSocket) {
   const { joinRoomId } = payload;
   if (!rooms.has(joinRoomId)) {
     sendJson(socket, {
-      type: "error",
-      reason: "ROOM_NOT_FOUND",
+      type: "room-not-found",
     });
-    return
+    return;
   }
 
   const room = rooms.get(joinRoomId)!;

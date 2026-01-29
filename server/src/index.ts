@@ -96,9 +96,10 @@ app.post("/api/joinRoom", (req, res) => {
   res.status(200).json({ success: true });
 });
 
-app.get("/api/room/:roomId",(req,res)=>{
+app.get("/api/rooms/:roomId",(req,res)=>{
     const { roomId } = req.params;
-    if (!rooms.has(roomId)) {
+    console.log("roomId",roomId)
+    if (!rooms.has(roomId as string)) {
     return res.status(404).json({ exists: false });
   }
   return res.status(200).json({ exists: true });
