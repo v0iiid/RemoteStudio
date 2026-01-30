@@ -47,6 +47,7 @@ export interface ConsumerConnectMessage extends BaseMessage<
 
 export interface ConsumerReadyMessage extends BaseMessage<"consumer-ready", { consumerId?: string }> {}
 export interface ConsumeExistingMessage extends BaseMessage<"consume-existing",{  peerId: string;}> {}
+export interface ConsumerReadyForConsumerMessage extends BaseMessage<'consumer-ready-for-consume'>{}
 
 export type ClientToServerMessage =
   | CreateRoomMessage
@@ -60,4 +61,5 @@ export type ClientToServerMessage =
   | ConsumeMessage
   | ConsumerConnectMessage
   | ConsumerReadyMessage
-  | ConsumeExistingMessage;
+  | ConsumeExistingMessage
+  | ConsumerReadyForConsumerMessage;

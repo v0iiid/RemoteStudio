@@ -19,6 +19,7 @@ import {
   close,
   consumerConnect,
   consumerReady,
+  consumerReadyForConsume,
   createConsumerTransport,
   createNewRoom,
   createProducerTransport,
@@ -77,7 +78,7 @@ const app = express();
 app.use(express.json());
 app.use(
   cors({
-    origin: ["https://192.168.1.2:3000", "http://localhost:3000",],
+    origin: ["https://10.200.30.193:3000", "http://localhost:3000",],
     credentials: true,
   }),
 );
@@ -157,7 +158,10 @@ wss.on("connection", async (socket) => {
         consumerConnect(parsed.payload, socket);
         break;
       }
-
+      case "consumer-ready-for-consume":{
+        consumerReadyForConsume(socket)
+break;
+      }
       case "consumer-ready": {
         consumerReady(parsed.payload, socket);
         break;

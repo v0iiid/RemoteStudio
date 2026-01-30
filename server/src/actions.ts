@@ -109,6 +109,7 @@ export async function consumerConnect(payload: any, socket: WebSocket) {
   peer.consumerTransportConnected = true;
 
   sendJson(socket, { type: "consumer-connected" });
+  console.log("consumer connected01->",peer.rtpCapabilities)
   if (peer.rtpCapabilities) {
     console.log("consumer connected->")
     await createConsumersForExistingProducers(peer, room, router);
@@ -147,7 +148,7 @@ export async function transportProduce(payload: any, socket: WebSocket) {
       paused: true,
       appData: { producerId: producer.id },
     });
-    console.log("--------->new conusmer ");
+    console.log("--------->new conusmer by transportProduce ",consumer.kind);
     sendJson(otherPeer.ws, {
       type: "newConsumer",
       payload: {
@@ -159,7 +160,6 @@ export async function transportProduce(payload: any, socket: WebSocket) {
     });
     otherPeer.consumers.set(consumer.id, consumer);
   }
-
   console.log("producer-id:", producer.id);
 }
 
@@ -194,14 +194,14 @@ export async function consumerReady(payload: any, socket: WebSocket) {
   const { consumerId } = payload;
   const consumer = peer.consumers.get(consumerId);
   if (!consumer) return;
-  console.log("Consumer paused:", consumer.paused);
   await consumer.requestKeyFrame();
   await consumer.resume();
   console.log("consumer resumed on backend");
 }
 async function createConsumersForExistingProducers(newPeer: Peer, room: Room, router: Router) {
+  console.log("going for existing")
   if (!newPeer.consumerTransport) return;
-
+  console.log("going for existing 2")
   for (const otherPeer of room.peers.values()) {
     if (otherPeer.id === newPeer.id) continue;
 
@@ -218,7 +218,7 @@ async function createConsumersForExistingProducers(newPeer: Peer, room: Room, ro
         })
       )
         continue;
-
+        console.log("going for existing consumer")
       const consumer = await newPeer.consumerTransport.consume({
         producerId: producer.id,
         rtpCapabilities: newPeer.rtpCapabilities,
@@ -239,4 +239,13 @@ async function createConsumersForExistingProducers(newPeer: Peer, room: Room, ro
       });
     }
   }
+}
+
+export async function consumerReadyForConsume(socket: WebSocket) {
+  const { peer, room, router } = safeContext(socket);
+
+  if (!peer.consumerTransport) return;
+  if (!peer.rtpCapabilities) return;
+
+  await createConsumersForExistingProducers(peer, room, router);
 }
