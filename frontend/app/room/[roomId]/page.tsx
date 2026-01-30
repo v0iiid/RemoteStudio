@@ -30,7 +30,7 @@ export default function Room() {
 
   }, [])
   const connectWebSocket = () => {
-    const ws = new WebSocket("https://192.168.1.2:8000/");
+    const ws = new WebSocket("https://10.200.30.193:8000/");
 
     socketRef.current = ws;
     const device = new mediasoupClient.Device();
@@ -169,6 +169,7 @@ export default function Room() {
               pendingConsumers.current = [];
             }
           });
+            ws.send(JSON.stringify({ type: "consumer-ready-for-consume" }));
           break;
 
         case "produce-data":
