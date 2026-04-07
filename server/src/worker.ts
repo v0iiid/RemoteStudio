@@ -24,19 +24,20 @@ export async function initWorker() {
 
 export async function initWebRtcServer() {
   const currentWorker = await initWorker();
+  const announcedIp = process.env.MEDIASOUP_ANNOUNCED_IP || "127.0.0.1";
 
   const webRtcServer = await currentWorker.createWebRtcServer({
     listenInfos: [
       {
         protocol: "udp",
         ip: "0.0.0.0",
-        announcedIp: "10.200.30.193",
+        announcedIp,
         port: 20005,
       },
       {
         protocol: "tcp",
         ip: "0.0.0.0",
-        announcedIp: "10.200.30.193",
+        announcedIp,
         port: 20005,
       },
     ],

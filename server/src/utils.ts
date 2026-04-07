@@ -44,6 +44,7 @@ export function cleanupPeer(socket: WebSocket, roomId: string) {
   const peerId = wsToPeerId.get(socket);
   if (peerId) {
     const peer = room.peers.get(peerId);
+    const producerIds = peer ? [...peer.producers.keys()] : [];
 
     if (peer?.producerTransport) peer.producerTransport.close();
     if (peer?.consumerTransport) peer.consumerTransport.close();
@@ -53,6 +54,14 @@ export function cleanupPeer(socket: WebSocket, roomId: string) {
 
     room.peers.delete(peerId);
     wsToPeerId.delete(socket);
+    peerIdToRoomId.delete(peerId);
+
+    for (const otherPeer of room.peers.values()) {
+      sendJson(otherPeer.ws, {
+        type: "peer-left",
+        payload: { peerId, producerIds },
+      });
+    }
 
     if (room.peers.size === 0) {
       room.router.close();

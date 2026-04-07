@@ -30,7 +30,7 @@ import {
 } from "./actions.js";
 import type { ClientToServerMessage } from "./type.js";
 import fs from "fs";
-import path from "path";
+
 export interface Peer {
   id: string;
   roomId: string;
@@ -69,8 +69,8 @@ let webRtcServer: WebRtcServer;
 const worker = await initWorker();
 
 const options = {
-  key: fs.readFileSync("./ssl/key.pem"),
-  cert: fs.readFileSync("./ssl/cert.pem"),
+  key: fs.readFileSync("./ssl/localhost+3-key.pem"),
+  cert: fs.readFileSync("./ssl/localhost+3.pem"),
 };
 
 const app = express();
@@ -78,7 +78,7 @@ const app = express();
 app.use(express.json());
 app.use(
   cors({
-    origin: ["https://10.200.30.193:3000", "http://localhost:3000",],
+    origin: ["https://10.200.30.193:3000", "https://localhost:3000",],
     credentials: true,
   }),
 );

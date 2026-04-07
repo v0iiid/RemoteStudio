@@ -34,10 +34,26 @@ export async function joinRoom(payload: any, socket: WebSocket) {
   peerIdToRoomId.set(peerId, room.id);
   wsToPeerId.set(socket, peerId);
   const existingPeerIds = [...room.peers.keys()].filter((id) => id !== peerId);
+  const existingProducerIds = existingPeerIds.flatMap((existingId) => {
+    const existingPeer = room.peers.get(existingId);
+    if (!existingPeer) return [];
+    return [...existingPeer.producers.keys()];
+  });
+
   sendJson(socket, {
     type: "joined-room",
-    payload: { joinRoomId, peerId, existingPeerIds },
+    payload: { joinRoomId, peerId, existingPeerIds, existingProducerIds },
   });
+
+  for (const existingPeerId of existingPeerIds) {
+    const existingPeer = room.peers.get(existingPeerId);
+    if (!existingPeer) continue;
+
+    sendJson(existingPeer.ws, {
+      type: "peer-joined",
+      payload: { peerId },
+    });
+  }
 }
 
 export function close(socket: WebSocket) {

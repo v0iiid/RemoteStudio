@@ -1,46 +1,56 @@
-import { TransportOptions } from 'mediasoup-client/types';
+import type { RtpCapabilities, RtpParameters } from "mediasoup-client/lib/RtpParameters";
+import type { TransportOptions } from "mediasoup-client/types";
 
-export interface BaseMessage<Type extends string, Payload = {}> {
+export type BaseMessage<
+  Type extends string,
+  Payload = Record<string, never>,
+> = {
   type: Type;
   payload: Payload;
-}
+};
 
-export interface RoomCreatedMessage extends BaseMessage<'room-created', { roomId: string }> {}
-export interface RoomNotFoundMessage extends BaseMessage<'room-not-found'> {}
-export interface JoinedRoomMessage extends BaseMessage<
-  'joined-room',
+export type RoomCreatedMessage = BaseMessage<"room-created", { roomId: string }>;
+export type RoomNotFoundMessage = BaseMessage<"room-not-found">;
+export type JoinedRoomMessage = BaseMessage<
+  "joined-room",
   {
     joinRoomId: string;
     peerId: string;
     existingPeerIds: string[];
-    existingProducerIds:string[]
+    existingProducerIds: string[];
   }
-> {}
+>;
 
-export interface RtpCapabilitiesMessage extends BaseMessage<
-  'rtpCapabilities',
-  { rtpCapabilities: any }
-> {}
+export type RtpCapabilitiesMessage = BaseMessage<
+  "rtpCapabilities",
+  { rtpCapabilities: RtpCapabilities }
+>;
 
-export interface TransportCreatedMessage extends BaseMessage<
-  'transportCreated',
+export type TransportCreatedMessage = BaseMessage<
+  "transportCreated",
   TransportOptions
-> {}
-export interface ConsumerTransportCreatedMessage extends BaseMessage<
-  'consumerTransportCreated',
+>;
+export type ConsumerTransportCreatedMessage = BaseMessage<
+  "consumerTransportCreated",
   TransportOptions
-> {}
-export interface ConsumerCreatedMessage extends BaseMessage<'consumer-connected'> {}
-export interface ProduceDataMessage extends BaseMessage<'produce-data', { id: string }> {}
-export interface NewConsumerMessage extends BaseMessage<
-  'newConsumer',
+>;
+export type ConsumerCreatedMessage = BaseMessage<"consumer-connected">;
+export type ProduceDataMessage = BaseMessage<"produce-data", { id: string }>;
+export type PeerJoinedMessage = BaseMessage<"peer-joined", { peerId: string }>;
+export type PeerLeftMessage = BaseMessage<
+  "peer-left",
+  { peerId: string; producerIds: string[] }
+>;
+export type NewConsumerMessage = BaseMessage<
+  "newConsumer",
   {
     id: string;
     producerId: string;
-    kind: 'audio' | 'video';
-    rtpParameters: any;
+    kind: "audio" | "video";
+    rtpParameters: RtpParameters;
   }
-> {}
+>;
+
 export type ServerToClientMessage =
   | RoomNotFoundMessage
   | RoomCreatedMessage
@@ -50,4 +60,6 @@ export type ServerToClientMessage =
   | ConsumerCreatedMessage
   | ConsumerTransportCreatedMessage
   | ProduceDataMessage
+  | PeerJoinedMessage
+  | PeerLeftMessage
   | NewConsumerMessage;

@@ -1,0 +1,13 @@
+* [33mf0f3d28[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m frontend: add create trasnport and start camera
+* [33m831bbe3[m[33m ([m[1;31morigin/main[m[33m)[m server: send rtpCap... using ws
+* [33m3b94fc4[m frontend:added device and connected ws with backend to get rtpCap...
+* [33md3c2d8f[m server: add ws and get rtpCapabilities
+* [33m103f055[m frontend: ws init
+* [33m7d26af4[m server: created transport layer
+* [33mb4e61c1[m server: remove bun and npm init
+*   [33m5e46f5d[m Merge branch 'main' of https://github.com/v0iiid/RemoteStudio
+[32m|[m[33m\[m  
+[32m|[m * [33me36a5c1[m Update README.md
+* [33m|[m [33m422cb47[m init frontend and server
+[33m|[m[33m/[m  
+* [33mb3c56df[m first commit
