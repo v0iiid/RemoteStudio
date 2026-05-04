@@ -1,5 +1,6 @@
 import * as mediasoup from "mediasoup";
 import type { types as mediasoupTypes } from "mediasoup";
+import "./config.js";
 
 let worker: mediasoupTypes.Worker;
 let router: mediasoupTypes.Router;

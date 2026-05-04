@@ -1,6 +1,8 @@
 "use client";
 
 import axios from "axios";
+import { clientConfig, clientConfigReady } from "@/lib/config";
+import { saveHostToken } from "@/lib/host-access";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -11,14 +13,14 @@ const capabilityCards = [
       "Create a studio, share a code, and bring hosts or guests into the same remote session.",
   },
   {
-    title: "Recording-first direction",
+    title: "Local HD masters",
     description:
-      "The current flow already feels like the live control room that local track recording will plug into.",
+      "Each device can keep its own local recording so the final file stays cleaner than the live call layer.",
   },
   {
-    title: "Coming next",
+    title: "Host collection",
     description:
-      "Local device recording and retryable uploads for safer remote podcast production.",
+      "At the end of the session, the host can collect uploaded individual recordings from the room.",
   },
 ];
 
@@ -32,21 +34,29 @@ export default function Home() {
   const router = useRouter();
 
   const createRoom = async () => {
+    if (!clientConfigReady) {
+      setErrorMessage(
+        "Frontend env is missing. Set NEXT_PUBLIC_API_BASE_URL and NEXT_PUBLIC_WS_URL first."
+      );
+      return;
+    }
+
     try {
       setIsCreating(true);
       setErrorMessage("");
       setInfoMessage("");
       setCopied(false);
 
-      const res = await axios.post("https://localhost:8000/api/createRoom");
+      const res = await axios.post(`${clientConfig.apiBaseUrl}/api/createRoom`);
       const data = res.data;
       setRoomId(data.roomId);
       setJoinId(data.roomId);
+      saveHostToken(data.roomId, data.hostToken);
       setInfoMessage("Room created. Share the code or enter the studio directly.");
     } catch (err) {
       console.error("error creating room", err);
       setErrorMessage(
-        "Could not create a room right now. Check whether the backend is running on localhost:8000."
+        "Could not create a room right now. Check your env values and whether the backend is running."
       );
     } finally {
       setIsCreating(false);
@@ -102,7 +112,7 @@ export default function Home() {
         <section className="mt-6 grid gap-6 lg:grid-cols-[1.2fr_0.95fr]">
           <div className="panel-surface rounded-[32px] p-7 sm:p-10">
             <div className="badge-soft inline-flex rounded-full px-3 py-1 text-xs font-medium uppercase tracking-[0.28em]">
-              Current focus: remote studio sessions
+              Current focus: live sessions with local masters
             </div>
 
             <h1 className="mt-6 max-w-3xl text-4xl font-semibold tracking-tight text-white sm:text-5xl">
@@ -110,9 +120,9 @@ export default function Home() {
             </h1>
 
             <p className="mt-5 max-w-2xl text-base leading-7 text-slate-300 sm:text-lg">
-              The live session layer is already doing the important work. This pass makes
-              the frontend feel more like a real remote recording studio while keeping the
-              future local-recording and upload pieces clearly positioned as the next phase.
+              RemoteStudio handles the live room and now keeps the recording flow pointed
+              toward per-device masters, so the host can collect separate uploads after the
+              session instead of relying only on live-call quality.
             </p>
 
             <div className="mt-8 flex flex-wrap gap-3">
@@ -123,7 +133,7 @@ export default function Home() {
                 Join by studio code
               </div>
               <div className="status-pill rounded-full px-4 py-2 text-sm text-slate-200">
-                Built for recording later
+                Host download flow
               </div>
             </div>
 
@@ -148,8 +158,8 @@ export default function Home() {
                 Start or join a studio session
               </h2>
               <p className="mt-3 text-sm leading-6 text-slate-300">
-                Keep the main action obvious: create a remote studio, share the ID, and
-                bring everyone into the same recording space.
+                Create a remote studio, share the ID, and bring everyone into the same
+                live room with local recording support.
               </p>
             </div>
 
@@ -234,25 +244,25 @@ export default function Home() {
           <article className="panel-muted rounded-[28px] p-6">
             <p className="text-sm font-semibold text-white">What already feels solid</p>
             <p className="mt-3 text-sm leading-6 text-slate-300">
-              The app already has the right product story: remote session creation, live
-              connection, and a media pipeline that can grow into recording-first workflows.
+              The app now has the right core story: room creation, live connection, local
+              device capture, and host-side collection of uploaded masters.
             </p>
           </article>
 
           <article className="panel-muted rounded-[28px] p-6">
             <p className="text-sm font-semibold text-white">What this UI pass improves</p>
             <p className="mt-3 text-sm leading-6 text-slate-300">
-              Clearer hierarchy, stronger call-to-actions, and a more believable studio
-              product feel without changing the app architecture.
+              Clearer hierarchy, stronger call-to-actions, and a recording-first studio
+              story without disrupting the existing live-room architecture.
             </p>
           </article>
 
           <article className="rounded-[28px] border border-sky-300/14 bg-sky-400/10 p-6">
             <p className="text-sm font-semibold text-sky-100">Roadmap framing</p>
             <p className="mt-3 text-sm leading-6 text-slate-200">
-              The next recording layer can plug into this flow naturally:
+              The next step from here is reliability rather than foundation:
               <span className="mt-2 block text-slate-300">
-                local device recording, retry upload, and richer production controls.
+                retry upload, recording progress syncing, and richer production controls.
               </span>
             </p>
           </article>

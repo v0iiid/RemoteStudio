@@ -1,5 +1,4 @@
-import type { RtpCapabilities, RtpParameters } from "mediasoup-client/lib/RtpParameters";
-import type { TransportOptions } from "mediasoup-client/types";
+import type { RtpCapabilities, RtpParameters, TransportOptions } from "mediasoup-client/types";
 
 export type BaseMessage<
   Type extends string,
@@ -18,6 +17,8 @@ export type JoinedRoomMessage = BaseMessage<
     peerId: string;
     existingPeerIds: string[];
     existingProducerIds: string[];
+    isHost: boolean;
+    uploadToken: string;
   }
 >;
 

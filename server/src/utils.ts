@@ -2,6 +2,7 @@ import type { Router, Worker } from "mediasoup/types";
 import { peerIdToRoomId, rooms, wsToPeerId, type Room } from "./index.js";
 import type { types as mediasoupTypes } from "mediasoup";
 import type WebSocket from "ws";
+import { removeSessionPeer } from "./recordings.js";
 
 export async function createRoom(roomId: string, worker: Worker): Promise<Room> {
 
@@ -55,6 +56,7 @@ export function cleanupPeer(socket: WebSocket, roomId: string) {
     room.peers.delete(peerId);
     wsToPeerId.delete(socket);
     peerIdToRoomId.delete(peerId);
+    removeSessionPeer(roomId, peerId);
 
     for (const otherPeer of room.peers.values()) {
       sendJson(otherPeer.ws, {

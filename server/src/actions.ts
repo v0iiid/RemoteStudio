@@ -1,6 +1,7 @@
 import type { ProducerOptions, Router, WebRtcServer, Worker } from "mediasoup/types";
 import { createPeerId, createRoomId, peerIdToRoomId, rooms, wsToPeerId, type Peer, type Room } from "./index.js";
 import { cleanupPeer, createRoom, getRoomAndRouter, safeContext, sendJson } from "./utils.js";
+import { registerSessionPeer } from "./recordings.js";
 import type WebSocket from "ws";
 
 export async function createNewRoom(worker: Worker) {
@@ -10,7 +11,7 @@ export async function createNewRoom(worker: Worker) {
 }
 
 export async function joinRoom(payload: any, socket: WebSocket) {
-  const { joinRoomId } = payload;
+  const { joinRoomId, hostToken } = payload;
   if (!rooms.has(joinRoomId)) {
     sendJson(socket, {
       type: "room-not-found",
@@ -20,10 +21,12 @@ export async function joinRoom(payload: any, socket: WebSocket) {
 
   const room = rooms.get(joinRoomId)!;
   const peerId = createPeerId();
+  const sessionPeer = registerSessionPeer(joinRoomId, peerId, hostToken);
   const peer: Peer = {
     id: peerId,
     roomId: joinRoomId,
     ws: socket,
+    isHost: sessionPeer.isHost,
     producerTransport: undefined,
     consumerTransport: undefined,
     consumerTransportConnected: false,
@@ -42,7 +45,14 @@ export async function joinRoom(payload: any, socket: WebSocket) {
 
   sendJson(socket, {
     type: "joined-room",
-    payload: { joinRoomId, peerId, existingPeerIds, existingProducerIds },
+    payload: {
+      joinRoomId,
+      peerId,
+      existingPeerIds,
+      existingProducerIds,
+      isHost: sessionPeer.isHost,
+      uploadToken: sessionPeer.uploadToken,
+    },
   });
 
   for (const existingPeerId of existingPeerIds) {

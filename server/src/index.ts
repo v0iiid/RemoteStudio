@@ -1,20 +1,18 @@
 import express from "express";
+import fs from "fs";
 import { initWebRtcServer, initWorker } from "./worker.js";
 import https from "https";
 import cors from "cors";
 import WebSocket, { WebSocketServer } from "ws";
 import {
   type Consumer,
-  type ConsumerOptions,
   type Producer,
-  type ProducerOptions,
   type Router,
-  type Transport,
   type WebRtcServer,
   type WebRtcTransport,
 } from "mediasoup/types";
-import crypto, { randomUUID, type UUID } from "crypto";
-import { cleanupPeer, createRoom, getRoomAndRouter, safeContext, sendJson } from "./utils.js";
+import crypto, { randomUUID } from "crypto";
+import { cleanupPeer, safeContext } from "./utils.js";
 import {
   close,
   consumerConnect,
@@ -28,13 +26,24 @@ import {
   producerTransportConnect,
   transportProduce,
 } from "./actions.js";
+import { serverConfig } from "./config.js";
+import {
+  createRoomHostAccess,
+  getRecordingForDownload,
+  listRoomRecordings,
+  openRecordingDownloadStream,
+  finalizeRecordingUpload,
+  startRecordingUploadSession,
+  storeRecordingChunk,
+  storeUploadedRecording,
+} from "./recordings.js";
 import type { ClientToServerMessage } from "./type.js";
-import fs from "fs";
 
 export interface Peer {
   id: string;
   roomId: string;
   ws: WebSocket;
+  isHost: boolean;
 
   producerTransport: WebRtcTransport | undefined;
   consumerTransport: WebRtcTransport | undefined;
@@ -69,8 +78,8 @@ let webRtcServer: WebRtcServer;
 const worker = await initWorker();
 
 const options = {
-  key: fs.readFileSync("./ssl/localhost+3-key.pem"),
-  cert: fs.readFileSync("./ssl/localhost+3.pem"),
+  key: fs.readFileSync(serverConfig.sslKeyPath),
+  cert: fs.readFileSync(serverConfig.sslCertPath),
 };
 
 const app = express();
@@ -78,16 +87,16 @@ const app = express();
 app.use(express.json());
 app.use(
   cors({
-    origin: ["https://10.200.30.193:3000", "https://localhost:3000",],
+    origin: serverConfig.corsOrigins,
     credentials: true,
   }),
 );
 
 app.post("/api/createRoom", async (req, res) => {
-
   const roomId = await createNewRoom(worker);
+  const hostAccess = createRoomHostAccess(roomId);
 
-  res.status(200).json({ roomId });
+  res.status(200).json(hostAccess);
 });
 
 app.post("/api/joinRoom", (req, res) => {
@@ -105,6 +114,266 @@ app.get("/api/rooms/:roomId", (req, res) => {
     return res.status(404).json({ exists: false });
   }
   return res.status(200).json({ exists: true });
+});
+
+app.put("/api/rooms/:roomId/recordings/:peerId", async (req, res) => {
+  const { roomId, peerId } = req.params;
+
+  try {
+    const recording = await storeUploadedRecording({
+      roomId,
+      peerId,
+      uploadToken: req.header("x-recording-token"),
+      mimeType: req.header("x-recording-mime-type") || undefined,
+      durationSeconds: Number(req.header("x-recording-duration-seconds") || "0"),
+      request: req,
+    });
+
+    return res.status(200).json({
+      recording: {
+        id: recording.id,
+        peerId: recording.peerId,
+        role: recording.role,
+        fileName: recording.fileName,
+        mimeType: recording.mimeType,
+        size: recording.size,
+        durationSeconds: recording.durationSeconds,
+        uploadedAt: recording.uploadedAt,
+      },
+    });
+  } catch (error) {
+    console.error("recording upload failed", error);
+
+    if (error instanceof Error) {
+      if (error.message === "ROOM_SESSION_NOT_FOUND") {
+        return res.status(404).json({ error: "Room session not found" });
+      }
+
+      if (error.message === "UPLOAD_ACCESS_DENIED") {
+        return res.status(403).json({ error: "Upload access denied" });
+      }
+    }
+
+    return res.status(500).json({ error: "Recording upload failed" });
+  }
+});
+
+app.post("/api/rooms/:roomId/recordings/:peerId/upload-session", async (req, res) => {
+  const { roomId, peerId } = req.params;
+
+  try {
+    const uploadSession = await startRecordingUploadSession({
+      roomId,
+      peerId,
+      uploadToken: req.header("x-recording-token"),
+      mimeType: req.body?.mimeType,
+    });
+
+    return res.status(200).json(uploadSession);
+  } catch (error) {
+    console.error("recording upload session start failed", error);
+
+    if (error instanceof Error) {
+      if (error.message === "ROOM_SESSION_NOT_FOUND") {
+        return res.status(404).json({ error: "Room session not found" });
+      }
+
+      if (error.message === "UPLOAD_ACCESS_DENIED") {
+        return res.status(403).json({ error: "Upload access denied" });
+      }
+    }
+
+    return res.status(500).json({ error: "Unable to start recording upload session" });
+  }
+});
+
+app.put(
+  "/api/rooms/:roomId/recordings/:peerId/upload-session/:uploadSessionId/chunks/:chunkIndex",
+  async (req, res) => {
+    const { roomId, peerId, uploadSessionId, chunkIndex } = req.params;
+
+    try {
+      const storedChunk = await storeRecordingChunk({
+        roomId,
+        peerId,
+        uploadSessionId,
+        uploadToken: req.header("x-recording-token"),
+        chunkIndex: Number(chunkIndex),
+        request: req,
+      });
+
+      return res.status(200).json(storedChunk);
+    } catch (error) {
+      console.error("recording chunk upload failed", error);
+
+      if (error instanceof Error) {
+        if (error.message === "ROOM_SESSION_NOT_FOUND") {
+          return res.status(404).json({ error: "Room session not found" });
+        }
+
+        if (error.message === "UPLOAD_ACCESS_DENIED") {
+          return res.status(403).json({ error: "Upload access denied" });
+        }
+
+        if (
+          error.message === "UPLOAD_SESSION_NOT_FOUND" ||
+          error.message === "UPLOAD_SESSION_MISMATCH"
+        ) {
+          return res.status(404).json({ error: "Upload session not found" });
+        }
+
+        if (error.message === "INVALID_CHUNK_INDEX") {
+          return res.status(400).json({ error: "Invalid chunk index" });
+        }
+      }
+
+      return res.status(500).json({ error: "Recording chunk upload failed" });
+    }
+  }
+);
+
+app.post(
+  "/api/rooms/:roomId/recordings/:peerId/upload-session/:uploadSessionId/finalize",
+  async (req, res) => {
+    const { roomId, peerId, uploadSessionId } = req.params;
+
+    try {
+      const recording = await finalizeRecordingUpload({
+        roomId,
+        peerId,
+        uploadSessionId,
+        uploadToken: req.header("x-recording-token"),
+        totalChunks: Number(req.body?.totalChunks),
+        durationSeconds: Number(req.body?.durationSeconds || "0"),
+      });
+
+      return res.status(200).json({
+        recording: {
+          id: recording.id,
+          peerId: recording.peerId,
+          role: recording.role,
+          fileName: recording.fileName,
+          mimeType: recording.mimeType,
+          size: recording.size,
+          durationSeconds: recording.durationSeconds,
+          uploadedAt: recording.uploadedAt,
+        },
+      });
+    } catch (error) {
+      console.error("recording upload finalize failed", error);
+
+      if (error instanceof Error) {
+        if (error.message === "ROOM_SESSION_NOT_FOUND") {
+          return res.status(404).json({ error: "Room session not found" });
+        }
+
+        if (error.message === "UPLOAD_ACCESS_DENIED") {
+          return res.status(403).json({ error: "Upload access denied" });
+        }
+
+        if (
+          error.message === "UPLOAD_SESSION_NOT_FOUND" ||
+          error.message === "UPLOAD_SESSION_MISMATCH"
+        ) {
+          return res.status(404).json({ error: "Upload session not found" });
+        }
+
+        if (error.message === "INVALID_TOTAL_CHUNKS") {
+          return res.status(400).json({ error: "Invalid total chunk count" });
+        }
+
+        if (error.message === "MISSING_CHUNKS") {
+          const missingChunks = (
+            error as Error & { missingChunks?: number[] }
+          ).missingChunks;
+
+          return res.status(409).json({
+            error: "Missing recording chunks",
+            missingChunks: missingChunks ?? [],
+          });
+        }
+      }
+
+      return res.status(500).json({ error: "Unable to finalize recording upload" });
+    }
+  }
+);
+
+app.get("/api/rooms/:roomId/recordings", (req, res) => {
+  const { roomId } = req.params;
+
+  try {
+    const recordings = listRoomRecordings(roomId, req.header("x-host-token")).map(
+      (recording) => ({
+        id: recording.id,
+        peerId: recording.peerId,
+        role: recording.role,
+        fileName: recording.fileName,
+        mimeType: recording.mimeType,
+        size: recording.size,
+        durationSeconds: recording.durationSeconds,
+        uploadedAt: recording.uploadedAt,
+      })
+    );
+
+    return res.status(200).json({ recordings });
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.message === "ROOM_SESSION_NOT_FOUND") {
+        return res.status(404).json({ error: "Room session not found" });
+      }
+
+      if (error.message === "HOST_ACCESS_DENIED") {
+        return res.status(403).json({ error: "Host access denied" });
+      }
+    }
+
+    return res.status(500).json({ error: "Unable to list recordings" });
+  }
+});
+
+app.get("/api/rooms/:roomId/recordings/:recordingId/download", async (req, res) => {
+  const { roomId, recordingId } = req.params;
+
+  try {
+    const recording = getRecordingForDownload(
+      roomId,
+      recordingId,
+      req.header("x-host-token")
+    );
+
+    res.setHeader("Content-Type", recording.mimeType);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${recording.fileName}"`
+    );
+
+    const stream = await openRecordingDownloadStream(recording);
+    stream.on("error", () => {
+      if (!res.headersSent) {
+        res.status(404).json({ error: "Recording file not found" });
+      } else {
+        res.end();
+      }
+    });
+    stream.pipe(res);
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.message === "ROOM_SESSION_NOT_FOUND") {
+        return res.status(404).json({ error: "Room session not found" });
+      }
+
+      if (error.message === "HOST_ACCESS_DENIED") {
+        return res.status(403).json({ error: "Host access denied" });
+      }
+
+      if (error.message === "RECORDING_NOT_FOUND") {
+        return res.status(404).json({ error: "Recording not found" });
+      }
+    }
+
+    return res.status(500).json({ error: "Unable to download recording" });
+  }
 });
 
 const httpServer = https.createServer(options, app);
@@ -177,6 +446,6 @@ break;
   });
 });
 
-httpServer.listen(8000, "0.0.0.0", () => {
-  console.log("Sever running on port 8000");
+httpServer.listen(serverConfig.port, serverConfig.host, () => {
+  console.log(`Server running on ${serverConfig.host}:${serverConfig.port}`);
 });

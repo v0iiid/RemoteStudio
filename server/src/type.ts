@@ -7,7 +7,8 @@ export interface BaseMessage<Type extends string, Payload = {}> {
 
 export interface CreateRoomMessage extends BaseMessage<"create-room"> {}
 export interface CloseRoomMessage extends BaseMessage<"close-room"> {}
-export interface JoinRoomMessage extends BaseMessage<"join-room", { joinRoomId: string }> {}
+export interface JoinRoomMessage
+  extends BaseMessage<"join-room", { joinRoomId: string; hostToken?: string }> {}
 export interface GetRtpCapabilitiesMessage extends BaseMessage<"getRtpCapabilities"> {}
 
 export interface CreateTransportMessage extends BaseMessage<"createTransport"> {}
